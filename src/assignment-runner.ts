@@ -93,6 +93,20 @@ export type RunnerInboundEventKind =
   | "policy.updated"
   | "evidence.upload_requested";
 
+const runnerInboundEventKinds = new Set<RunnerInboundEventKind>([
+  "runner.register.accepted",
+  "task.assigned",
+  "task.cancel_requested",
+  "policy.updated",
+  "evidence.upload_requested",
+]);
+
+const runnerRedactionStatuses = new Set<RunnerRedactionStatus>([
+  "metadata_only",
+  "sanitized",
+  "explicit_raw_upload",
+]);
+
 export interface RunnerProtocolEvent<
   Kind extends string = string,
   Payload extends Record<string, unknown> = Record<string, unknown>,
@@ -444,18 +458,18 @@ function parseAssignmentEvent(
   event: RunnerAssignmentEvent,
   identity: RunnerIdentity,
 ): RunnerAssignmentPayload {
-  if (event.schemaVersion !== RUNNER_CONTROL_PLANE_SCHEMA_VERSION) {
+  const envelopeError = invalidInboundControlPlaneEventReason(event, identity, {
+    requirePolicyMatch: false,
+  });
+  if (envelopeError) {
     throw new RunnerAssignmentCycleError(
-      `unsupported runner protocol schema ${event.schemaVersion}`,
+      `invalid assignment event envelope: ${envelopeError}`,
     );
   }
   if (event.kind !== "task.assigned") {
     throw new RunnerAssignmentCycleError(
       `expected task.assigned event, got ${event.kind}`,
     );
-  }
-  if (event.tenantId !== identity.tenantId || event.runnerId !== identity.runnerId) {
-    throw new RunnerAssignmentCycleError("assignment identity mismatch");
   }
   const payload = event.payload;
   for (const key of ["taskId", "repoId", "flowId", "policyVersion"] as const) {
@@ -464,6 +478,9 @@ function parseAssignmentEvent(
         `assignment payload missing ${key}`,
       );
     }
+  }
+  if (event.taskId !== payload.taskId) {
+    throw new RunnerAssignmentCycleError("assignment event task id mismatch");
   }
   return {
     taskId: payload.taskId,
@@ -812,20 +829,60 @@ function isValidInboundControlPlaneEvent(
   event: RunnerInboundEvent,
   identity: RunnerIdentity,
 ): boolean {
-  return (
-    event.schemaVersion === RUNNER_CONTROL_PLANE_SCHEMA_VERSION &&
-    event.tenantId === identity.tenantId &&
-    event.runnerId === identity.runnerId &&
-    event.policyVersion === identity.policyVersion &&
-    isProtocolSegment(event.eventId) &&
-    (event.taskId === undefined || isProtocolSegment(event.taskId)) &&
-    (event.runId === undefined || isProtocolSegment(event.runId)) &&
-    (event.sequence === undefined ||
-      (Number.isInteger(event.sequence) && event.sequence >= 0)) &&
-    typeof event.createdAt === "string" &&
-    !Number.isNaN(Date.parse(event.createdAt)) &&
-    isRecord(event.payload)
-  );
+  return invalidInboundControlPlaneEventReason(event, identity) === undefined;
+}
+
+function invalidInboundControlPlaneEventReason(
+  event: RunnerProtocolEvent,
+  identity: RunnerIdentity,
+  options: { requirePolicyMatch?: boolean } = {},
+): string | undefined {
+  if (event.schemaVersion !== RUNNER_CONTROL_PLANE_SCHEMA_VERSION) {
+    return `unsupported runner protocol schema ${event.schemaVersion}`;
+  }
+  if (!runnerInboundEventKinds.has(event.kind as RunnerInboundEventKind)) {
+    return `unsupported control-plane event kind ${event.kind}`;
+  }
+  if (event.tenantId !== identity.tenantId || event.runnerId !== identity.runnerId) {
+    return "control-plane event identity mismatch";
+  }
+  if (!isProtocolSegment(event.policyVersion)) {
+    return `invalid policy version: ${String(event.policyVersion)}`;
+  }
+  if (
+    options.requirePolicyMatch !== false &&
+    event.policyVersion !== identity.policyVersion
+  ) {
+    return "control-plane event policy mismatch";
+  }
+  if (!isProtocolSegment(event.eventId)) {
+    return `invalid event id: ${String(event.eventId)}`;
+  }
+  if (event.taskId !== undefined && !isProtocolSegment(event.taskId)) {
+    return `invalid task id: ${String(event.taskId)}`;
+  }
+  if (event.runId !== undefined && !isProtocolSegment(event.runId)) {
+    return `invalid run id: ${String(event.runId)}`;
+  }
+  if (
+    event.sequence !== undefined &&
+    (!Number.isInteger(event.sequence) || event.sequence < 0)
+  ) {
+    return "runner protocol sequence must be a non-negative integer";
+  }
+  if (
+    typeof event.createdAt !== "string" ||
+    Number.isNaN(Date.parse(event.createdAt))
+  ) {
+    return "control-plane event createdAt must be a valid timestamp";
+  }
+  if (!runnerRedactionStatuses.has(event.redactionStatus)) {
+    return `unsupported redaction status ${event.redactionStatus}`;
+  }
+  if (!isRecord(event.payload)) {
+    return "control-plane event payload must be an object";
+  }
+  return undefined;
 }
 
 function isProtocolSegment(value: unknown): value is string {

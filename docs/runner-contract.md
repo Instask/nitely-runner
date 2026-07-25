@@ -139,6 +139,13 @@ credentialed clone URLs, runner-local checkout path fields, authorization
 headers, cookies, runner tokens, or secret-like input metadata. Rejected
 assignments produce a metadata-only `task.rejected` event and do not invoke the
 local executor.
+Before that business-level decision, the runner validates the `task.assigned`
+event envelope itself: schema, supported inbound event kind, tenant id, runner
+id, protocol ids, sequence, timestamp, redaction status, payload shape, and
+top-level `taskId` consistency. Malformed assignment events fail the polling
+cycle without invoking the executor or sending a runner event based on an
+untrusted envelope. Stale assignment policy metadata still produces the normal
+`policy_version_mismatch` task rejection.
 
 The assignment cycle reports accepted/preparing events before execution. When
 the executor observes a run id from streamed CLI output, the runner immediately

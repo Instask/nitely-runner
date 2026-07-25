@@ -261,6 +261,103 @@ describe("runOneAssignmentCycle", () => {
     }
   });
 
+  it("fails malformed assignment event envelopes before execution", async () => {
+    const missingEventId = assignment() as Partial<RunnerAssignmentEvent>;
+    delete missingEventId.eventId;
+    const cases: Array<{
+      name: string;
+      assignment: RunnerAssignmentEvent;
+      expectedMessage: RegExp;
+    }> = [
+      {
+        name: "missing event id",
+        assignment: missingEventId as RunnerAssignmentEvent,
+        expectedMessage: /invalid event id: undefined/,
+      },
+      {
+        name: "invalid sequence",
+        assignment: {
+          ...assignment(),
+          sequence: -1,
+        },
+        expectedMessage: /sequence must be a non-negative integer/,
+      },
+      {
+        name: "invalid timestamp",
+        assignment: {
+          ...assignment(),
+          createdAt: "not-a-date",
+        },
+        expectedMessage: /createdAt must be a valid timestamp/,
+      },
+      {
+        name: "task id mismatch",
+        assignment: {
+          ...assignment(),
+          taskId: "task-envelope",
+        },
+        expectedMessage: /assignment event task id mismatch/,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { client, reports } = fakeClient([testCase.assignment]);
+      let executorCalls = 0;
+
+      await expect(
+        runOneAssignmentCycle({
+          identity,
+          client,
+          executor: {
+            execute: async () => {
+              executorCalls += 1;
+              return { status: "succeeded", runId: "run-1" };
+            },
+          },
+        }),
+      ).rejects.toThrow(testCase.expectedMessage);
+      expect(executorCalls, testCase.name).toBe(0);
+      expect(reports, testCase.name).toEqual([]);
+    }
+  });
+
+  it("reports a task rejection when assignment policy metadata is stale", async () => {
+    const { client, reports } = fakeClient([
+      assignment({ policyVersion: "policy-stale" }),
+    ]);
+    let executorCalls = 0;
+
+    const result = await runOneAssignmentCycle({
+      identity,
+      client,
+      now: fixedNow,
+      createId: (kind) => `stale-policy-${kind}`,
+      executor: {
+        execute: async () => {
+          executorCalls += 1;
+          return { status: "succeeded", runId: "run-stale-policy" };
+        },
+      },
+    });
+
+    expect(executorCalls).toBe(0);
+    expect(result.status).toBe("handled");
+    if (result.status !== "handled") {
+      throw new Error("expected handled result");
+    }
+    expect(result.projection.status).toBe("rejected");
+    expect(result.reportedEvents).toHaveLength(1);
+    expect(result.reportedEvents[0]).toMatchObject({
+      kind: "task.rejected",
+      payload: {
+        reason: "policy_version_mismatch",
+        safeMessage:
+          "assignment policy policy-stale does not match runner policy policy-1",
+      },
+    });
+    expect(reports).toHaveLength(1);
+  });
+
   it("aborts an active assignment when a cancellation request is polled", async () => {
     const client = new MemoryRunnerControlPlaneClient([assignment()]);
     let observedSignal: AbortSignal | undefined;
