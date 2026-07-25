@@ -97,7 +97,11 @@ runner cycle run=<run-id>
 
 `run-once` sends metadata-only heartbeat events before and after the assignment
 cycle, then reports accepted/preparing/started/terminal run events for the
-assignment itself.
+assignment itself. The runner reports accepted/preparing before invoking the
+local Nitely CLI, reports `run.started` as soon as the executor observes a run
+id from stdout, and can abort the active subprocess if
+`GET /runner/events?tenantId=...&runnerId=...` returns a matching
+`task.cancel_requested` event.
 
 If the control plane rejects an event, the CLI exits non-zero and prints each
 rejected event id, kind, and safe reason.

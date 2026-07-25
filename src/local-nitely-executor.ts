@@ -11,6 +11,7 @@ export interface NitelyCommandResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  cancelled?: boolean;
 }
 
 export interface NitelyCommandInvocation {
@@ -18,6 +19,9 @@ export interface NitelyCommandInvocation {
   args: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
+  onStdout?: (chunk: string) => Promise<void> | void;
+  onStderr?: (chunk: string) => Promise<void> | void;
 }
 
 export type NitelyCommandRunner = (
@@ -50,6 +54,8 @@ export class LocalNitelyCliExecutor implements RunnerAssignmentExecutor {
   async execute(input: {
     identity: RunnerIdentity;
     assignment: RunnerAssignmentPayload;
+    signal?: AbortSignal;
+    onRunStarted?: (runId: string) => Promise<void> | void;
   }): Promise<RunnerExecutionResult> {
     const repoPath = this.#repositoryPaths[input.assignment.repoId];
     if (!repoPath) {
@@ -71,6 +77,7 @@ export class LocalNitelyCliExecutor implements RunnerAssignmentExecutor {
       args.push("--input", cliInput);
     }
 
+    const runStartObserver = createRunStartObserver(input.onRunStarted);
     const result = await this.#runCommand({
       command: this.#command,
       args,
@@ -83,8 +90,19 @@ export class LocalNitelyCliExecutor implements RunnerAssignmentExecutor {
           ? { NITELY_RUNNER_SOURCE_REVISION: input.assignment.sourceRevision }
           : {}),
       },
+      ...(input.signal ? { signal: input.signal } : {}),
+      onStdout: runStartObserver.observe,
     });
+    await runStartObserver.flush();
 
+    const runId = parseRunId(result.stdout) ?? runStartObserver.runId();
+    if (result.cancelled || input.signal?.aborted) {
+      return {
+        status: "cancelled",
+        ...(runId ? { runId } : {}),
+        safeMessage: "cancelled by control-plane request",
+      };
+    }
     if (result.exitCode !== 0) {
       return {
         status: "failed",
@@ -93,7 +111,6 @@ export class LocalNitelyCliExecutor implements RunnerAssignmentExecutor {
       };
     }
 
-    const runId = parseRunId(result.stdout);
     if (!runId) {
       return {
         status: "failed",
@@ -159,7 +176,7 @@ function localInputPath(value: unknown): string | undefined {
 }
 
 function parseRunId(stdout: string): string | undefined {
-  return stdout.match(/^RUN\s+(\S+)\s+completed$/m)?.[1];
+  return parseObservedRunId(stdout);
 }
 
 function parseChangeRequestUrl(stdout: string): string | undefined {
@@ -179,6 +196,10 @@ async function defaultCommandRunner(
   invocation: NitelyCommandInvocation,
 ): Promise<NitelyCommandResult> {
   return await new Promise((resolve, reject) => {
+    if (invocation.signal?.aborted) {
+      resolve({ exitCode: 130, stdout: "", stderr: "", cancelled: true });
+      return;
+    }
     const child = spawn(invocation.command, invocation.args, {
       cwd: invocation.cwd,
       env: invocation.env,
@@ -186,17 +207,91 @@ async function defaultCommandRunner(
     });
     let stdout = "";
     let stderr = "";
+    let cancelled = false;
+    let closed = false;
+    let forceKillTimer: NodeJS.Timeout | undefined;
+    const callbackPromises: Promise<void>[] = [];
+    const enqueueCallback = (callback: Promise<void> | void): void => {
+      if (callback instanceof Promise) {
+        callbackPromises.push(callback);
+      }
+    };
+    const abort = (): void => {
+      cancelled = true;
+      child.kill("SIGTERM");
+      forceKillTimer = setTimeout(() => {
+        if (!closed) {
+          child.kill("SIGKILL");
+        }
+      }, 5_000);
+      forceKillTimer.unref();
+    };
+    invocation.signal?.addEventListener("abort", abort, { once: true });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
+      enqueueCallback(invocation.onStdout?.(chunk));
     });
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
+      enqueueCallback(invocation.onStderr?.(chunk));
     });
     child.on("error", reject);
-    child.on("close", (code) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
+    child.on("close", async (code) => {
+      closed = true;
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
+      invocation.signal?.removeEventListener("abort", abort);
+      await Promise.all(callbackPromises);
+      resolve({ exitCode: cancelled ? 130 : code ?? 1, stdout, stderr, cancelled });
     });
   });
+}
+
+function createRunStartObserver(
+  onRunStarted: ((runId: string) => Promise<void> | void) | undefined,
+): {
+  observe: (chunk: string) => Promise<void>;
+  flush: () => Promise<void>;
+  runId: () => string | undefined;
+} {
+  let stdout = "";
+  let observedRunId: string | undefined;
+  const callbacks: Promise<void>[] = [];
+  const reportRunId = (runId: string): void => {
+    if (observedRunId) {
+      return;
+    }
+    observedRunId = runId;
+    const callback = onRunStarted?.(runId);
+    if (callback instanceof Promise) {
+      callbacks.push(callback);
+    }
+  };
+  return {
+    observe: async (chunk: string) => {
+      stdout += chunk;
+      const runId = parseObservedRunId(stdout);
+      if (runId) {
+        reportRunId(runId);
+      }
+    },
+    flush: async () => {
+      const runId = parseObservedRunId(stdout);
+      if (runId) {
+        reportRunId(runId);
+      }
+      await Promise.all(callbacks);
+    },
+    runId: () => observedRunId,
+  };
+}
+
+function parseObservedRunId(stdout: string): string | undefined {
+  return (
+    stdout.match(/^RUN\s+(\S+)\s+(?:created|started|running|completed)$/m)?.[1] ??
+    stdout.match(/^Run ID:\s+(\S+)$/im)?.[1]
+  );
 }

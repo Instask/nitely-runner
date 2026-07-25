@@ -128,6 +128,11 @@ Structured remote inputs are intentionally rejected until a connector-specific
 materialization step exists. The executor reports only safe metadata: run id,
 change request URL, flow id/path, and source revision.
 
+The assignment cycle reports accepted/preparing events before execution. When
+the executor observes a run id from streamed CLI output, the runner immediately
+reports `run.started`, then polls `pollControlPlaneEvents(identity)` while the
+subprocess remains active.
+
 Executors may return `evidenceArtifacts` when they have artifact metadata that
 is safe to share. The runner reports those entries as a metadata-only
 `evidence.reported` event before terminal completion, while keeping raw logs,
@@ -154,9 +159,10 @@ Cancellation is cooperative first and forceful second:
 4. Runner force-kills after a bounded grace period.
 5. Runner records terminal cancellation evidence.
 
-The current client layer can poll and project cancellation requests. Actual
-subprocess interruption belongs in the daemon loop, not the single synchronous
-`run-once` rehearsal.
+`runOneAssignmentCycle` and `run-once` pass an `AbortSignal` into the executor.
+`LocalNitelyCliExecutor` sends `SIGTERM` to the active `nitely run` subprocess
+and escalates to `SIGKILL` after a bounded grace period. A daemon loop can reuse
+the same cycle and cancellation behavior when it is added.
 
 ## Secrets
 

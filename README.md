@@ -41,7 +41,8 @@ local runner loop before daemon transport. Executors can also return artifact
 metadata as `evidenceArtifacts`; the runner reports it through metadata-only
 `evidence.reported` events. The control-plane client interface also polls
 inbound control-plane events such as cooperative `task.cancel_requested`
-instructions.
+instructions, and the local CLI executor can abort an active `nitely run`
+subprocess when that request matches the current run.
 
 - [docs/runner-contract.md](docs/runner-contract.md)
 - [docs/mvp-roadmap.md](docs/mvp-roadmap.md)

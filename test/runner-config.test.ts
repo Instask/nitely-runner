@@ -145,11 +145,13 @@ describe("runner config", () => {
     expect(fetchCalls.map((call) => call.url)).toEqual([
       "https://control.example/api/runner/assignments?tenantId=tenant-1&runnerId=runner-1",
       "https://control.example/api/runner/events",
+      "https://control.example/api/runner/events",
     ]);
     expect(fetchCalls[0]?.init).toMatchObject({
       headers: { authorization: "Bearer runner-token" },
     });
-    expect(JSON.parse(String(fetchCalls[1]?.init?.body)).events).toHaveLength(4);
+    expect(JSON.parse(String(fetchCalls[1]?.init?.body)).events).toHaveLength(2);
+    expect(JSON.parse(String(fetchCalls[2]?.init?.body)).events).toHaveLength(2);
   });
 
   it("reports heartbeat around one HTTP-backed runner cycle", async () => {
@@ -188,12 +190,14 @@ describe("runner config", () => {
       "https://control.example/api/runner/assignments?tenantId=tenant-1&runnerId=runner-1",
       "https://control.example/api/runner/events",
       "https://control.example/api/runner/events",
+      "https://control.example/api/runner/events",
     ]);
     expect(JSON.parse(String(fetchCalls[0]?.init?.body)).events).toMatchObject([
       { kind: "runner.heartbeat", payload: { status: "idle" } },
     ]);
-    expect(JSON.parse(String(fetchCalls[2]?.init?.body)).events).toHaveLength(4);
-    expect(JSON.parse(String(fetchCalls[3]?.init?.body)).events).toMatchObject([
+    expect(JSON.parse(String(fetchCalls[2]?.init?.body)).events).toHaveLength(2);
+    expect(JSON.parse(String(fetchCalls[3]?.init?.body)).events).toHaveLength(2);
+    expect(JSON.parse(String(fetchCalls[4]?.init?.body)).events).toMatchObject([
       { kind: "runner.heartbeat", payload: { status: "idle" } },
     ]);
   });

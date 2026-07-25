@@ -6,6 +6,7 @@ import {
   type RunnerAssignmentEvent,
   type RunnerControlPlaneClient,
   type RunnerIdentity,
+  type RunnerInboundEvent,
   type RunnerOutboundEvent,
 } from "../src/assignment-runner.js";
 import { LocalNitelyCliExecutor } from "../src/local-nitely-executor.js";
@@ -160,7 +161,7 @@ describe("runOneAssignmentCycle", () => {
         ],
       },
     });
-    expect(reports).toHaveLength(1);
+    expect(reports).toHaveLength(2);
   });
 
   it("runs against the reusable in-memory control-plane client", async () => {
@@ -186,6 +187,61 @@ describe("runOneAssignmentCycle", () => {
       "run.preparing",
       "run.started",
       "run.completed",
+    ]);
+  });
+
+  it("aborts an active assignment when a cancellation request is polled", async () => {
+    const client = new MemoryRunnerControlPlaneClient([assignment()]);
+    let observedSignal: AbortSignal | undefined;
+
+    const result = await runOneAssignmentCycle({
+      identity,
+      client,
+      now: fixedNow,
+      createId: (kind) => `cancel-${kind}`,
+      cancellationPollIntervalMs: 1,
+      sleep: async () => {},
+      executor: {
+        execute: async ({ signal, onRunStarted }) => {
+          observedSignal = signal;
+          await onRunStarted?.("run-cancel");
+          client.enqueueControlPlaneEvent(
+            cancellationRequest({
+              sequence: 4,
+              runId: "run-cancel",
+            }),
+          );
+          await waitForAbort(signal);
+          return {
+            status: "cancelled",
+            runId: "run-cancel",
+            safeMessage: "cancelled after operator request",
+          };
+        },
+      },
+    });
+
+    expect(observedSignal?.aborted).toBe(true);
+    expect(result.status).toBe("handled");
+    if (result.status !== "handled") {
+      throw new Error("expected handled result");
+    }
+    expect(result.projection).toMatchObject({
+      status: "cancelled",
+      runId: "run-cancel",
+      lastSequence: 5,
+    });
+    expect(result.reportedEvents.map((event) => event.kind)).toEqual([
+      "task.accepted",
+      "run.preparing",
+      "run.started",
+      "run.cancelled",
+    ]);
+    expect(result.report.acceptedEventIds).toEqual([
+      "cancel-task.accepted",
+      "cancel-run.preparing",
+      "cancel-run.started",
+      "cancel-run.cancelled",
     ]);
   });
 
@@ -322,3 +378,37 @@ describe("runOneAssignmentCycle", () => {
     });
   });
 });
+
+function cancellationRequest(input: {
+  runId: string;
+  sequence: number;
+}): RunnerInboundEvent {
+  return {
+    eventId: "cancel-request-1",
+    schemaVersion: RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
+    tenantId: identity.tenantId,
+    runnerId: identity.runnerId,
+    taskId: "task-1",
+    runId: input.runId,
+    sequence: input.sequence,
+    createdAt: "2026-07-25T01:02:04.000Z",
+    kind: "task.cancel_requested",
+    payload: {
+      taskId: "task-1",
+      runId: input.runId,
+      reason: "operator_requested",
+      safeMessage: "cancelled after operator request",
+    },
+    redactionStatus: "metadata_only",
+    policyVersion: identity.policyVersion,
+  };
+}
+
+async function waitForAbort(signal: AbortSignal | undefined): Promise<void> {
+  if (!signal || signal.aborted) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
+}

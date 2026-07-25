@@ -173,6 +173,8 @@ export interface RunnerAssignmentExecutor {
   execute(input: {
     identity: RunnerIdentity;
     assignment: RunnerAssignmentPayload;
+    signal?: AbortSignal;
+    onRunStarted?: (runId: string) => Promise<void> | void;
   }): Promise<RunnerExecutionResult>;
 }
 
@@ -195,6 +197,8 @@ export interface RunOneAssignmentCycleInput {
   executor: RunnerAssignmentExecutor;
   now?: () => Date;
   createId?: (kind: RunnerOutboundEventKind) => string;
+  cancellationPollIntervalMs?: number;
+  sleep?: (durationMs: number) => Promise<void>;
 }
 
 export class RunnerAssignmentCycleError extends Error {
@@ -216,7 +220,19 @@ export async function runOneAssignmentCycle(
   const assignment = parseAssignmentEvent(assignmentEvent, input.identity);
   let projection = createAssignmentProjection(toLifecycleEvent(assignmentEvent));
   const events: RunnerOutboundEvent[] = [];
+  const reports: RunnerEventReportResult[] = [];
   let nextSequence = (assignmentEvent.sequence ?? 0) + 1;
+
+  const reportBatch = async (
+    batch: RunnerOutboundEvent[],
+  ): Promise<RunnerEventReportResult> => {
+    if (batch.length === 0) {
+      return emptyReport();
+    }
+    const report = await input.client.reportEvents(batch);
+    reports.push(report);
+    return report;
+  };
 
   const reject = assignmentRejection(input.identity, assignment);
   if (reject) {
@@ -235,7 +251,8 @@ export async function runOneAssignmentCycle(
     });
     projection = applyRunnerLifecycleEvent(projection, toLifecycleEvent(rejected));
     events.push(rejected);
-    return await reportHandled(input.client, assignment, projection, events);
+    await reportBatch([rejected]);
+    return reportHandled(assignment, projection, events, reports);
   }
 
   const accepted = createRunnerEvent({
@@ -278,32 +295,113 @@ export async function runOneAssignmentCycle(
   });
   events.push(preparing);
   projection = applyRunnerLifecycleEvent(projection, toLifecycleEvent(preparing));
+  const preparationReport = await reportBatch([accepted, preparing]);
+  if (preparationReport.rejectedEvents.length > 0) {
+    return reportHandled(assignment, projection, events, reports);
+  }
 
   let execution: RunnerExecutionResult;
+  const abortController = new AbortController();
+  let executionDone = false;
+  let cancellationEvent: RunnerInboundEvent | undefined;
+  let startedReported = false;
+  const reportRunStarted = async (runId: string): Promise<void> => {
+    if (startedReported) {
+      return;
+    }
+    startedReported = true;
+    const started = createRunnerEvent({
+      identity: input.identity,
+      kind: "run.started",
+      taskId: assignment.taskId,
+      runId,
+      sequence: nextSequence++,
+      now: input.now,
+      createId: input.createId,
+      payload: {
+        runId,
+        taskId: assignment.taskId,
+        repoId: assignment.repoId,
+        ...(assignment.sourceRevision
+          ? { sourceRevision: assignment.sourceRevision }
+          : {}),
+        flowId: assignment.flowId,
+        ...(assignment.flowPath ? { flowPath: assignment.flowPath } : {}),
+      },
+    });
+    events.push(started);
+    projection = applyRunnerLifecycleEvent(projection, toLifecycleEvent(started));
+    const report = await reportBatch([started]);
+    if (report.rejectedEvents.length > 0) {
+      abortController.abort();
+    }
+  };
+  const cancellationWatcher = watchCancellationRequests({
+    identity: input.identity,
+    assignment,
+    client: input.client,
+    signal: abortController.signal,
+    isDone: () => executionDone,
+    currentRunId: () => projection.runId,
+    sleep: input.sleep ?? sleep,
+    pollIntervalMs: input.cancellationPollIntervalMs ?? 1_000,
+    onCancel: (event) => {
+      cancellationEvent = event;
+      projection = applyRunnerLifecycleEvent(projection, toLifecycleEvent(event));
+      if (event.sequence !== undefined && event.sequence >= nextSequence) {
+        nextSequence = event.sequence + 1;
+      }
+      abortController.abort();
+    },
+  });
   try {
     execution = await input.executor.execute({
       identity: input.identity,
       assignment,
+      signal: abortController.signal,
+      onRunStarted: reportRunStarted,
     });
   } catch (error) {
+    execution = cancellationEvent
+      ? {
+          status: "cancelled",
+          runId: projection.runId,
+          safeMessage: cancellationSafeMessage(cancellationEvent),
+        }
+      : {
+          status: "failed",
+          failureCategory: "executor_error",
+          safeMessage: safeErrorMessage(error),
+        };
+  } finally {
+    executionDone = true;
+    abortController.abort();
+    await cancellationWatcher;
+  }
+
+  if (execution.status === "cancelled" && !execution.runId && projection.runId) {
     execution = {
-      status: "failed",
-      failureCategory: "executor_error",
-      safeMessage: safeErrorMessage(error),
+      ...execution,
+      runId: projection.runId,
     };
   }
 
-  const started = createStartedEvent({
-    identity: input.identity,
-    assignment,
-    execution,
-    sequence: nextSequence++,
-    now: input.now,
-    createId: input.createId,
-  });
-  if (started) {
-    events.push(started);
-    projection = applyRunnerLifecycleEvent(projection, toLifecycleEvent(started));
+  const finalEvents: RunnerOutboundEvent[] = [];
+  if (!startedReported) {
+    const started = createStartedEvent({
+      identity: input.identity,
+      assignment,
+      execution,
+      sequence: nextSequence,
+      now: input.now,
+      createId: input.createId,
+    });
+    if (started) {
+      nextSequence += 1;
+      events.push(started);
+      finalEvents.push(started);
+      projection = applyRunnerLifecycleEvent(projection, toLifecycleEvent(started));
+    }
   }
 
   const evidence = createEvidenceReportedEvent({
@@ -316,6 +414,7 @@ export async function runOneAssignmentCycle(
   });
   if (evidence) {
     events.push(evidence);
+    finalEvents.push(evidence);
     nextSequence += 1;
   }
 
@@ -328,9 +427,11 @@ export async function runOneAssignmentCycle(
     createId: input.createId,
   });
   events.push(terminal);
+  finalEvents.push(terminal);
   projection = applyRunnerLifecycleEvent(projection, toLifecycleEvent(terminal));
+  await reportBatch(finalEvents);
 
-  return await reportHandled(input.client, assignment, projection, events);
+  return reportHandled(assignment, projection, events, reports);
 }
 
 function parseAssignmentEvent(
@@ -626,20 +727,83 @@ function isLifecycleKind(kind: string): kind is RunnerLifecycleEvent["kind"] {
   );
 }
 
-async function reportHandled(
-  client: RunnerControlPlaneClient,
+function reportHandled(
   assignment: RunnerAssignmentPayload,
   projection: RunnerAssignmentProjection,
   events: RunnerOutboundEvent[],
-): Promise<RunnerCycleResult> {
-  const report = await client.reportEvents(events);
+  reports: RunnerEventReportResult[],
+): RunnerCycleResult {
   return {
     status: "handled",
     assignment,
     projection,
     reportedEvents: events,
-    report,
+    report: mergeReports(reports),
   };
+}
+
+async function watchCancellationRequests(input: {
+  identity: RunnerIdentity;
+  assignment: RunnerAssignmentPayload;
+  client: RunnerControlPlaneClient;
+  signal: AbortSignal;
+  isDone: () => boolean;
+  currentRunId: () => string | undefined;
+  pollIntervalMs: number;
+  sleep: (durationMs: number) => Promise<void>;
+  onCancel: (event: RunnerInboundEvent) => void;
+}): Promise<void> {
+  while (!input.isDone() && !input.signal.aborted) {
+    const runId = input.currentRunId();
+    if (runId) {
+      const events = await input.client.pollControlPlaneEvents(input.identity);
+      const cancellation = events.find((event) =>
+        isMatchingCancellationRequest(event, input.assignment, runId),
+      );
+      if (cancellation) {
+        input.onCancel(cancellation);
+        return;
+      }
+    }
+    await sleepUntilNextPoll(input.sleep, input.pollIntervalMs, input.signal);
+  }
+}
+
+function isMatchingCancellationRequest(
+  event: RunnerInboundEvent,
+  assignment: RunnerAssignmentPayload,
+  runId: string,
+): boolean {
+  return (
+    event.kind === "task.cancel_requested" &&
+    event.taskId === assignment.taskId &&
+    (event.runId === undefined || event.runId === runId)
+  );
+}
+
+function cancellationSafeMessage(event: RunnerInboundEvent): string {
+  const safeMessage = event.payload.safeMessage;
+  if (typeof safeMessage === "string" && safeMessage.length > 0) {
+    return safeMessage;
+  }
+  const reason = event.payload.reason;
+  return typeof reason === "string" && reason.length > 0
+    ? `cancelled after ${reason}`
+    : "cancelled by control-plane request";
+}
+
+function mergeReports(
+  reports: RunnerEventReportResult[],
+): RunnerEventReportResult {
+  return {
+    acceptedEventIds: reports.flatMap((report) => report.acceptedEventIds),
+    duplicateEventIds: reports.flatMap((report) => report.duplicateEventIds),
+    rejectedEvents: reports.flatMap((report) => report.rejectedEvents),
+  };
+}
+
+function emptyReport(): RunnerEventReportResult {
+  return { acceptedEventIds: [], duplicateEventIds: [], rejectedEvents: [] };
 }
 
 function safeErrorMessage(error: unknown): string {
@@ -647,6 +811,26 @@ function safeErrorMessage(error: unknown): string {
     return error.message.split("\n")[0]!.slice(0, 500);
   }
   return "runner executor failed";
+}
+
+async function sleep(durationMs: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+async function sleepUntilNextPoll(
+  sleeper: (durationMs: number) => Promise<void>,
+  durationMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) {
+    return;
+  }
+  await Promise.race([
+    sleeper(durationMs),
+    new Promise<void>((resolve) => {
+      signal.addEventListener("abort", () => resolve(), { once: true });
+    }),
+  ]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

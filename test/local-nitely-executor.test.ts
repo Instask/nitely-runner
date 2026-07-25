@@ -50,7 +50,7 @@ describe("LocalNitelyCliExecutor", () => {
       },
     });
 
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       {
         command: "node",
         args: [
@@ -70,6 +70,7 @@ describe("LocalNitelyCliExecutor", () => {
           NITELY_RUNNER_TASK_ID: "task-1",
           NITELY_RUNNER_SOURCE_REVISION: "abc123",
         },
+        onStdout: expect.any(Function),
       },
     ]);
     expect(result).toEqual({
@@ -188,6 +189,45 @@ describe("LocalNitelyCliExecutor", () => {
       failureCategory: "nitely_cli_failed",
       safeMessage: "Missing GitHub token",
     });
+  });
+
+  it("observes streamed run start and returns cancelled when aborted", async () => {
+    const controller = new AbortController();
+    let reportedRunId: string | undefined;
+    const executor = new LocalNitelyCliExecutor({
+      repositoryPaths: { "repo-1": "/work/repo" },
+      runCommand: async (invocation) => {
+        await invocation.onStdout?.("RUN run-cancel started\n");
+        controller.abort();
+        return {
+          exitCode: 130,
+          stdout: "RUN run-cancel started\n",
+          stderr: "",
+          cancelled: invocation.signal?.aborted,
+        };
+      },
+    });
+
+    await expect(
+      executor.execute({
+        identity,
+        assignment: {
+          taskId: "task-1",
+          repoId: "repo-1",
+          flowId: "flow-1",
+          policyVersion: "policy-1",
+        },
+        signal: controller.signal,
+        onRunStarted: async (runId) => {
+          reportedRunId = runId;
+        },
+      }),
+    ).resolves.toEqual({
+      status: "cancelled",
+      runId: "run-cancel",
+      safeMessage: "cancelled by control-plane request",
+    });
+    expect(reportedRunId).toBe("run-cancel");
   });
 
   it("fails when the CLI succeeds without a run id", async () => {
