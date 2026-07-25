@@ -40,6 +40,7 @@ runner loop before daemon transport.
 
 - [docs/runner-contract.md](docs/runner-contract.md)
 - [docs/mvp-roadmap.md](docs/mvp-roadmap.md)
+- [docs/http-control-plane-rehearsal.md](docs/http-control-plane-rehearsal.md)
 
 ## Development
 

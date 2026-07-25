@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -19,6 +20,7 @@ import type { RunnerFetch } from "../src/http-control-plane.js";
 import type { NitelyCommandInvocation } from "../src/local-nitely-executor.js";
 
 const fixedNow = () => new Date("2026-07-25T01:02:03.000Z");
+const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const identity: RunnerIdentity = {
   tenantId: "tenant-1",
@@ -157,6 +159,26 @@ describe("runner config", () => {
         repositoryPaths: { "repo-1": "/repo" },
       }),
     ).toThrow("controlPlane.type must be file or http");
+  });
+
+  it("keeps the example HTTP config parseable", async () => {
+    const config = await loadRunnerConfig(
+      join(repoRoot, "examples", "http-runner.config.example.json"),
+    );
+
+    expect(config).toMatchObject({
+      identity: {
+        tenantId: "tenant-1",
+        runnerId: "runner-1",
+      },
+      controlPlane: {
+        type: "http",
+        baseUrl: "http://127.0.0.1:8787",
+      },
+      repositoryPaths: {
+        "repo-1": "/absolute/path/to/customer/repo",
+      },
+    });
   });
 });
 
