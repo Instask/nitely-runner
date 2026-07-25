@@ -7,6 +7,7 @@ import {
   type RunnerControlPlaneClient,
   type RunnerEventReportResult,
   type RunnerIdentity,
+  type RunnerInboundEvent,
   type RunnerOutboundEvent,
   type RunnerRedactionStatus,
   type RunnerRegistration,
@@ -21,6 +22,7 @@ export type FileRunnerAssignmentStatus =
   | "preparing"
   | "running"
   | "blocked"
+  | "cancelling"
   | "completed"
   | "failed"
   | "cancelled";
@@ -78,6 +80,12 @@ export interface FileRunnerAssignment {
     runId?: string;
     safeMessage?: string;
   };
+  cancellationRequest?: {
+    runId?: string;
+    reason: string;
+    safeMessage?: string;
+    requestedAt: string;
+  };
   changeRequestUrl?: string;
   evidenceSummary?: unknown;
   evidence?: Array<{
@@ -87,6 +95,7 @@ export interface FileRunnerAssignment {
     reportedAt: string;
   }>;
   assignedEvent: RunnerAssignmentEvent;
+  cancelRequestedEvent?: RunnerInboundEvent;
   createdAt: string;
   updatedAt: string;
 }
@@ -95,6 +104,7 @@ export interface FileRunnerControlPlaneState {
   version: 1;
   runners: Record<string, FileRunnerRegistration>;
   assignments: Record<string, FileRunnerAssignment>;
+  controlPlaneEvents: RunnerInboundEvent[];
   runnerEvents: RunnerOutboundEvent[];
 }
 
@@ -159,6 +169,21 @@ export class FileRunnerControlPlaneClient
       )
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
       .map((assignment) => assignment.assignedEvent);
+  }
+
+  async pollControlPlaneEvents(
+    identity: RunnerIdentity,
+  ): Promise<RunnerInboundEvent[]> {
+    const state = await readFileRunnerControlPlaneState(this.#path);
+    requireRunner(state, identity.tenantId, identity.runnerId);
+    return state.controlPlaneEvents
+      .filter(
+        (event) =>
+          event.tenantId === identity.tenantId &&
+          event.runnerId === identity.runnerId &&
+          shouldDeliverControlPlaneEvent(state, event),
+      )
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
   async reportEvents(
@@ -239,6 +264,9 @@ export async function readFileRunnerControlPlaneState(
     assignments: isRecord(raw.assignments)
       ? (raw.assignments as Record<string, FileRunnerAssignment>)
       : {},
+    controlPlaneEvents: Array.isArray(raw.controlPlaneEvents)
+      ? (raw.controlPlaneEvents as RunnerInboundEvent[])
+      : [],
     runnerEvents: Array.isArray(raw.runnerEvents)
       ? (raw.runnerEvents as RunnerOutboundEvent[])
       : [],
@@ -398,7 +426,13 @@ function validateRunnerEvent(
 }
 
 function emptyState(): FileRunnerControlPlaneState {
-  return { version: 1, runners: {}, assignments: {}, runnerEvents: [] };
+  return {
+    version: 1,
+    runners: {},
+    assignments: {},
+    controlPlaneEvents: [],
+    runnerEvents: [],
+  };
 }
 
 async function readJsonFile(path: string): Promise<unknown | undefined> {
@@ -423,6 +457,17 @@ function runnerKey(tenantId: string, runnerId: string): string {
 
 function assignmentKey(tenantId: string, taskId: string): string {
   return `${tenantId}:${taskId}`;
+}
+
+function shouldDeliverControlPlaneEvent(
+  state: FileRunnerControlPlaneState,
+  event: RunnerInboundEvent,
+): boolean {
+  if (event.kind !== "task.cancel_requested" || !event.taskId) {
+    return true;
+  }
+  const assignment = state.assignments[assignmentKey(event.tenantId, event.taskId)];
+  return assignment?.status === "cancelling";
 }
 
 function requireRunner(

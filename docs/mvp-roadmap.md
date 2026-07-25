@@ -14,6 +14,8 @@
   local runner loops.
 - Add an HTTP control-plane client for registration, assignment polling, and
   event reporting against the first runner-facing API skeleton.
+- Add inbound control-plane event polling for cooperative cancellation
+  requests.
 - Consume the public `nitely/runner-control-plane/*` contract once the OSS
   package is published or available as a workspace dependency.
 - Decide whether the first transport is polling, websocket, or queue-backed.
@@ -30,6 +32,8 @@
 - Report accepted, preparing, started, blocked, completed, failed, cancelled,
   and rejected events through the protocol client.
 - Report executor-provided artifact metadata through `evidence.reported`.
+- Poll control-plane cancellation requests through file-backed and HTTP
+  clients.
 - Execute an OSS Flow locally through `nitely run`.
 - Persist local run state and emit lifecycle events.
 

@@ -39,7 +39,9 @@ and local-file inputs. `loadRunnerConfig`, `registerConfiguredRunner`,
 `nitely-runner run-once --config <path>` provide the first file-backed and HTTP
 local runner loop before daemon transport. Executors can also return artifact
 metadata as `evidenceArtifacts`; the runner reports it through metadata-only
-`evidence.reported` events.
+`evidence.reported` events. The control-plane client interface also polls
+inbound control-plane events such as cooperative `task.cancel_requested`
+instructions.
 
 - [docs/runner-contract.md](docs/runner-contract.md)
 - [docs/mvp-roadmap.md](docs/mvp-roadmap.md)

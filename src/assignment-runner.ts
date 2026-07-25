@@ -84,6 +84,13 @@ export type RunnerOutboundEventKind =
   | "evidence.reported"
   | "runner.error";
 
+export type RunnerInboundEventKind =
+  | "runner.register.accepted"
+  | "task.assigned"
+  | "task.cancel_requested"
+  | "policy.updated"
+  | "evidence.upload_requested";
+
 export interface RunnerProtocolEvent<
   Kind extends string = string,
   Payload extends Record<string, unknown> = Record<string, unknown>,
@@ -107,6 +114,8 @@ export type RunnerAssignmentEvent = RunnerProtocolEvent<
   RunnerAssignmentPayload
 >;
 
+export type RunnerInboundEvent = RunnerProtocolEvent<RunnerInboundEventKind>;
+
 export type RunnerOutboundEvent = RunnerProtocolEvent<RunnerOutboundEventKind>;
 
 export interface RunnerEventReportResult {
@@ -121,6 +130,7 @@ export interface RunnerEventReportResult {
 
 export interface RunnerControlPlaneClient {
   pollAssignments(identity: RunnerIdentity): Promise<RunnerAssignmentEvent[]>;
+  pollControlPlaneEvents(identity: RunnerIdentity): Promise<RunnerInboundEvent[]>;
   reportEvents(events: RunnerOutboundEvent[]): Promise<RunnerEventReportResult>;
 }
 

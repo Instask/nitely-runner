@@ -3,6 +3,7 @@ import type {
   RunnerControlPlaneClient,
   RunnerEventReportResult,
   RunnerIdentity,
+  RunnerInboundEvent,
   RunnerOutboundEvent,
   RunnerRegistrationClient,
   RunnerRegistrationResult,
@@ -85,6 +86,25 @@ export class HttpRunnerControlPlaneClient
       );
     }
     return body.assignments as RunnerAssignmentEvent[];
+  }
+
+  async pollControlPlaneEvents(
+    identity: RunnerIdentity,
+  ): Promise<RunnerInboundEvent[]> {
+    const url = new URL("runner/events", this.#baseUrl);
+    url.searchParams.set("tenantId", identity.tenantId);
+    url.searchParams.set("runnerId", identity.runnerId);
+
+    const body = await this.#requestJson(url, {
+      method: "GET",
+      headers: this.#headers,
+    });
+    if (!isRecord(body) || !Array.isArray(body.events)) {
+      throw new HttpRunnerControlPlaneClientError(
+        "runner control-plane events response must be { events }",
+      );
+    }
+    return body.events as RunnerInboundEvent[];
   }
 
   async reportEvents(

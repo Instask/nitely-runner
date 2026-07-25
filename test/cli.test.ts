@@ -190,6 +190,7 @@ function fileState(): FileRunnerControlPlaneState {
         updatedAt: assignedEvent.createdAt,
       },
     },
+    controlPlaneEvents: [],
     runnerEvents: [],
   };
 }

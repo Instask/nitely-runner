@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
   type RunnerIdentity,
+  type RunnerInboundEvent,
   type RunnerOutboundEvent,
 } from "../src/assignment-runner.js";
 import {
@@ -166,6 +167,39 @@ describe("FileRunnerControlPlaneClient", () => {
     });
   });
 
+  it("polls queued control-plane cancellation requests", async () => {
+    const { path } = await fixture((state) => {
+      const assignment = state.assignments["tenant-1:task-1"]!;
+      assignment.status = "cancelling";
+      assignment.latestRunId = "run-1";
+      assignment.cancelRequestedEvent = controlPlaneEvent();
+      state.controlPlaneEvents.push(controlPlaneEvent());
+    });
+    const client = new FileRunnerControlPlaneClient({ path });
+
+    await expect(client.pollControlPlaneEvents(identity)).resolves.toMatchObject([
+      {
+        eventId: "cancel-request-1",
+        kind: "task.cancel_requested",
+        taskId: "task-1",
+        runId: "run-1",
+      },
+    ]);
+
+    await client.reportEvents([
+      runnerEvent("run.cancelled", {
+        eventId: "cancelled-1",
+        runId: "run-1",
+        payload: {
+          taskId: "task-1",
+          runId: "run-1",
+          safeMessage: "runner stopped cooperatively",
+        },
+      }),
+    ]);
+    await expect(client.pollControlPlaneEvents(identity)).resolves.toEqual([]);
+  });
+
   it("rejects raw payload keys for metadata-only events", async () => {
     const { path } = await fixture();
     const client = new FileRunnerControlPlaneClient({ path });
@@ -193,10 +227,14 @@ describe("FileRunnerControlPlaneClient", () => {
   });
 });
 
-async function fixture(): Promise<{ path: string }> {
+async function fixture(
+  mutate?: (state: FileRunnerControlPlaneState) => void,
+): Promise<{ path: string }> {
   const dir = await mkdtemp(join(tmpdir(), "nitely-file-control-plane-"));
   const path = join(dir, "control-plane.json");
-  await writeFileRunnerControlPlaneState(path, state());
+  const data = state();
+  mutate?.(data);
+  await writeFileRunnerControlPlaneState(path, data);
   return { path };
 }
 
@@ -256,7 +294,29 @@ function state(): FileRunnerControlPlaneState {
         updatedAt: assignedEvent.createdAt,
       },
     },
+    controlPlaneEvents: [],
     runnerEvents: [],
+  };
+}
+
+function controlPlaneEvent(): RunnerInboundEvent {
+  return {
+    eventId: "cancel-request-1",
+    schemaVersion: RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
+    tenantId: identity.tenantId,
+    runnerId: identity.runnerId,
+    taskId: "task-1",
+    runId: "run-1",
+    sequence: 2,
+    createdAt: "2026-07-25T01:01:00.000Z",
+    kind: "task.cancel_requested",
+    payload: {
+      taskId: "task-1",
+      runId: "run-1",
+      reason: "operator_requested",
+    },
+    redactionStatus: "metadata_only",
+    policyVersion: identity.policyVersion,
   };
 }
 

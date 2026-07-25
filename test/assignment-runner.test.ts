@@ -61,6 +61,7 @@ function fakeClient(assignments: RunnerAssignmentEvent[]): {
     reports,
     client: {
       pollAssignments: async () => assignments,
+      pollControlPlaneEvents: async () => [],
       reportEvents: async (events) => {
         reports.push(events);
         return {

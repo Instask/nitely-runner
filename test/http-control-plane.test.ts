@@ -4,6 +4,7 @@ import {
   RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
   type RunnerAssignmentEvent,
   type RunnerIdentity,
+  type RunnerInboundEvent,
   type RunnerOutboundEvent,
 } from "../src/assignment-runner.js";
 import { HttpRunnerControlPlaneClient } from "../src/http-control-plane.js";
@@ -115,6 +116,32 @@ describe("HttpRunnerControlPlaneClient", () => {
     });
   });
 
+  it("polls queued control-plane events with runner identity query parameters", async () => {
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const client = new HttpRunnerControlPlaneClient({
+      baseUrl: "https://control.example/api/",
+      headers: { authorization: "Bearer token" },
+      fetch: fakeFetch(calls, {
+        events: [controlPlaneEvent()],
+      }),
+    });
+
+    await expect(client.pollControlPlaneEvents(identity)).resolves.toMatchObject([
+      {
+        kind: "task.cancel_requested",
+        payload: { reason: "operator_requested" },
+      },
+    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(
+      "https://control.example/api/runner/events?tenantId=tenant-1&runnerId=runner-1",
+    );
+    expect(calls[0]?.init).toMatchObject({
+      method: "GET",
+      headers: { authorization: "Bearer token" },
+    });
+  });
+
   it("raises a safe error for non-2xx responses", async () => {
     const client = new HttpRunnerControlPlaneClient({
       baseUrl: "https://control.example",
@@ -168,6 +195,27 @@ function assignmentEvent(): RunnerAssignmentEvent {
       inputs: { spec: "docs/spec.md" },
       policyVersion: identity.policyVersion,
     },
+  };
+}
+
+function controlPlaneEvent(): RunnerInboundEvent {
+  return {
+    eventId: "cancel-request-1",
+    schemaVersion: RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
+    tenantId: identity.tenantId,
+    runnerId: identity.runnerId,
+    taskId: "task-1",
+    runId: "run-1",
+    sequence: 3,
+    createdAt: "2026-07-25T01:03:00.000Z",
+    kind: "task.cancel_requested",
+    payload: {
+      taskId: "task-1",
+      runId: "run-1",
+      reason: "operator_requested",
+    },
+    redactionStatus: "metadata_only",
+    policyVersion: identity.policyVersion,
   };
 }
 

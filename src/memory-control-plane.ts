@@ -3,6 +3,7 @@ import type {
   RunnerControlPlaneClient,
   RunnerEventReportResult,
   RunnerIdentity,
+  RunnerInboundEvent,
   RunnerOutboundEvent,
   RunnerRegistration,
   RunnerRegistrationClient,
@@ -13,15 +14,24 @@ export class MemoryRunnerControlPlaneClient
   implements RunnerControlPlaneClient, RunnerRegistrationClient
 {
   readonly #assignments: RunnerAssignmentEvent[] = [];
+  readonly #controlPlaneEvents: RunnerInboundEvent[] = [];
   readonly #events: RunnerOutboundEvent[] = [];
   readonly #runners = new Map<string, RunnerRegistration>();
 
-  constructor(assignments: RunnerAssignmentEvent[] = []) {
+  constructor(
+    assignments: RunnerAssignmentEvent[] = [],
+    controlPlaneEvents: RunnerInboundEvent[] = [],
+  ) {
     this.#assignments.push(...assignments);
+    this.#controlPlaneEvents.push(...controlPlaneEvents);
   }
 
   enqueueAssignment(assignment: RunnerAssignmentEvent): void {
     this.#assignments.push(assignment);
+  }
+
+  enqueueControlPlaneEvent(event: RunnerInboundEvent): void {
+    this.#controlPlaneEvents.push(event);
   }
 
   async registerRunner(
@@ -59,6 +69,16 @@ export class MemoryRunnerControlPlaneClient
     );
   }
 
+  async pollControlPlaneEvents(
+    identity: RunnerIdentity,
+  ): Promise<RunnerInboundEvent[]> {
+    return this.#controlPlaneEvents.filter(
+      (event) =>
+        event.tenantId === identity.tenantId &&
+        event.runnerId === identity.runnerId,
+    );
+  }
+
   async reportEvents(
     events: RunnerOutboundEvent[],
   ): Promise<RunnerEventReportResult> {
@@ -91,6 +111,14 @@ export class MemoryRunnerControlPlaneClient
       if (event.kind === "task.accepted" || event.kind === "task.rejected") {
         this.#removeAssignment(event.tenantId, event.runnerId, event.taskId);
       }
+      if (
+        event.kind === "task.rejected" ||
+        event.kind === "run.cancelled" ||
+        event.kind === "run.failed" ||
+        event.kind === "run.completed"
+      ) {
+        this.#removeControlPlaneEvents(event.tenantId, event.runnerId, event.taskId);
+      }
     }
 
     return result;
@@ -102,6 +130,10 @@ export class MemoryRunnerControlPlaneClient
 
   listEvents(): RunnerOutboundEvent[] {
     return [...this.#events];
+  }
+
+  listControlPlaneEvents(): RunnerInboundEvent[] {
+    return [...this.#controlPlaneEvents];
   }
 
   listRunners(): RunnerRegistration[] {
@@ -124,6 +156,26 @@ export class MemoryRunnerControlPlaneClient
     );
     if (index >= 0) {
       this.#assignments.splice(index, 1);
+    }
+  }
+
+  #removeControlPlaneEvents(
+    tenantId: string,
+    runnerId: string,
+    taskId: string | undefined,
+  ): void {
+    if (!taskId) {
+      return;
+    }
+    for (let index = this.#controlPlaneEvents.length - 1; index >= 0; index -= 1) {
+      const event = this.#controlPlaneEvents[index]!;
+      if (
+        event.tenantId === tenantId &&
+        event.runnerId === runnerId &&
+        event.taskId === taskId
+      ) {
+        this.#controlPlaneEvents.splice(index, 1);
+      }
     }
   }
 }

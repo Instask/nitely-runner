@@ -266,6 +266,7 @@ function fileState() {
         updatedAt: assignedEvent.createdAt,
       },
     },
+    controlPlaneEvents: [],
     runnerEvents: [],
   };
 }

@@ -80,6 +80,8 @@ abstract poll/report client:
 
 - `registerRunner(identity)`: register the runner identity and scoped policy.
 - `pollAssignments(identity)`: return ordered `task.assigned` protocol events.
+- `pollControlPlaneEvents(identity)`: return follow-up control-plane events such
+  as `task.cancel_requested`.
 - `reportEvents(events)`: append runner-to-control-plane events and return
   accepted, duplicate, and rejected event ids.
 
@@ -107,6 +109,7 @@ the first control-plane HTTP skeleton:
 
 - `POST /runner/register`
 - `GET /runner/assignments?tenantId=...&runnerId=...`
+- `GET /runner/events?tenantId=...&runnerId=...`
 - `POST /runner/events`
 
 It keeps transport details outside the executor and preserves the poll/report
@@ -146,10 +149,14 @@ it. Metadata-first streaming is the default.
 Cancellation is cooperative first and forceful second:
 
 1. Control plane sends cancellation intent.
-2. Runner records cancellation received.
+2. Runner receives it through `pollControlPlaneEvents(identity)`.
 3. Runner asks active subprocesses to terminate.
 4. Runner force-kills after a bounded grace period.
 5. Runner records terminal cancellation evidence.
+
+The current client layer can poll and project cancellation requests. Actual
+subprocess interruption belongs in the daemon loop, not the single synchronous
+`run-once` rehearsal.
 
 ## Secrets
 
