@@ -123,7 +123,8 @@ describe("runner config", () => {
         controlPlane: {
           type: "http",
           baseUrl: "https://control.example/api",
-          headers: { authorization: "Bearer runner-token" },
+          runnerToken: "runner-token",
+          headers: { "x-runner-region": "local" },
         },
         repositoryPaths: { "repo-1": repoPath },
       },
@@ -149,7 +150,10 @@ describe("runner config", () => {
       "https://control.example/api/runner/events",
     ]);
     expect(fetchCalls[0]?.init).toMatchObject({
-      headers: { authorization: "Bearer runner-token" },
+      headers: {
+        authorization: "Bearer runner-token",
+        "x-runner-region": "local",
+      },
     });
     expect(JSON.parse(String(fetchCalls[1]?.init?.body)).events).toHaveLength(2);
     expect(JSON.parse(String(fetchCalls[2]?.init?.body)).events).toHaveLength(2);
@@ -251,6 +255,23 @@ describe("runner config", () => {
     ).toThrow("controlPlane.type must be file or http");
   });
 
+  it("rejects ambiguous runner token and authorization header config", () => {
+    expect(() =>
+      parseRunnerConfig({
+        identity,
+        controlPlane: {
+          type: "http",
+          baseUrl: "https://control.example/api",
+          runnerToken: "runner-token",
+          headers: { Authorization: "Bearer other-token" },
+        },
+        repositoryPaths: { "repo-1": "/repo" },
+      }),
+    ).toThrow(
+      "controlPlane.runnerToken must not be combined with controlPlane.headers authorization",
+    );
+  });
+
   it("keeps the example HTTP config parseable", async () => {
     const config = await loadRunnerConfig(
       join(repoRoot, "examples", "http-runner.config.example.json"),
@@ -264,6 +285,7 @@ describe("runner config", () => {
       controlPlane: {
         type: "http",
         baseUrl: "http://127.0.0.1:8787",
+        runnerToken: "runner-dev-token",
       },
       repositoryPaths: {
         "repo-1": "/absolute/path/to/customer/repo",

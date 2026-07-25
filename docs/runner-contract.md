@@ -112,6 +112,10 @@ the first control-plane HTTP skeleton:
 - `GET /runner/events?tenantId=...&runnerId=...`
 - `POST /runner/events`
 
+When `controlPlane.runnerToken` is configured, the HTTP client sends it as an
+`Authorization: Bearer <token>` header on every runner route. Low-level
+`controlPlane.headers` remain available for deployment-specific headers, but
+config rejects combining `runnerToken` with an explicit authorization header.
 It keeps transport details outside the executor and preserves the poll/report
 shape used by memory and file-backed rehearsal.
 

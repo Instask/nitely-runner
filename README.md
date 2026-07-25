@@ -43,7 +43,8 @@ metadata as `evidenceArtifacts`; the runner reports it through metadata-only
 `evidence.reported` events. The control-plane client interface also polls
 inbound control-plane events such as cooperative `task.cancel_requested`
 instructions, and the local CLI executor can abort an active `nitely run`
-subprocess when that request matches the current run.
+subprocess when that request matches the current run. HTTP runner config
+supports a runner-scoped bearer token for protected control-plane routes.
 
 - [docs/runner-contract.md](docs/runner-contract.md)
 - [docs/mvp-roadmap.md](docs/mvp-roadmap.md)

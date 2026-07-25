@@ -15,13 +15,17 @@ It keeps execution local:
 From `nitely-control-plane`:
 
 ```bash
-npm start -- --host 127.0.0.1 --port 8787
+NITELY_CONTROL_PLANE_RUNNER_TOKEN=runner-dev-token \
+NITELY_CONTROL_PLANE_ADMIN_TOKEN=admin-dev-token \
+  npm start -- --host 127.0.0.1 --port 8787
 ```
 
 The package binary is equivalent:
 
 ```bash
-nitely-control-plane serve --host 127.0.0.1 --port 8787
+nitely-control-plane serve --host 127.0.0.1 --port 8787 \
+  --runner-token runner-dev-token \
+  --admin-token admin-dev-token
 ```
 
 ## 2. Prepare Runner Config
@@ -29,11 +33,18 @@ nitely-control-plane serve --host 127.0.0.1 --port 8787
 Copy `examples/http-runner.config.example.json` to a local ignored file such as
 `runner.http.local.json`, then replace `/absolute/path/to/customer/repo` with
 the local checkout that contains the flow and input files.
+If you used a different runner token in step 1, update
+`controlPlane.runnerToken` to the same value.
 
 The runner config owns the checkout mapping:
 
 ```json
 {
+  "controlPlane": {
+    "type": "http",
+    "baseUrl": "http://127.0.0.1:8787",
+    "runnerToken": "runner-dev-token"
+  },
   "repositoryPaths": {
     "repo-1": "/absolute/path/to/customer/repo"
   }
@@ -59,6 +70,7 @@ runner registered tenant=tenant-1 runner=runner-1 policy=policy-1
 ```bash
 curl -sS -X POST http://127.0.0.1:8787/assignments \
   -H 'content-type: application/json' \
+  -H 'authorization: Bearer admin-dev-token' \
   --data '{
     "tenantId": "tenant-1",
     "runnerId": "runner-1",
@@ -120,7 +132,8 @@ Use the run id printed by `run-once` to verify that the control plane accepted
 the terminal runner event and updated its run projection:
 
 ```bash
-curl -sS "http://127.0.0.1:8787/runs/<run-id>?tenantId=tenant-1"
+curl -sS "http://127.0.0.1:8787/runs/<run-id>?tenantId=tenant-1" \
+  -H 'authorization: Bearer admin-dev-token'
 ```
 
 The response should include the run id, task id, repository id, flow path, and a

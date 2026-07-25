@@ -9,7 +9,7 @@
   "controlPlane": {
     "type": "http",
     "baseUrl": "http://127.0.0.1:8787",
-    "headers": {}
+    "runnerToken": "runner-dev-token"
   },
   "nitelyCommand": "nitely",
   "repositoryPaths": {

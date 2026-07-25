@@ -19,6 +19,30 @@ const identity: RunnerIdentity = {
 };
 
 describe("HttpRunnerControlPlaneClient", () => {
+  it("applies runner token authorization while preserving extra headers", async () => {
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const client = new HttpRunnerControlPlaneClient({
+      baseUrl: "https://control.example/api/",
+      runnerToken: "runner-token",
+      headers: {
+        Authorization: "Bearer stale-token",
+        "x-runner-region": "local",
+      },
+      fetch: fakeFetch(calls, {
+        assignments: [assignmentEvent()],
+      }),
+    });
+
+    await client.pollAssignments(identity);
+
+    expect(calls[0]?.init).toMatchObject({
+      headers: {
+        authorization: "Bearer runner-token",
+        "x-runner-region": "local",
+      },
+    });
+  });
+
   it("registers the runner identity with the control plane", async () => {
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
     const client = new HttpRunnerControlPlaneClient({

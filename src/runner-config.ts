@@ -28,6 +28,7 @@ export interface FileControlPlaneConfig {
 export interface HttpControlPlaneConfig {
   type: "http";
   baseUrl: string;
+  runnerToken?: string;
   headers?: Record<string, string>;
 }
 
@@ -126,6 +127,19 @@ export function parseRunnerConfig(
       `controlPlane.type must be file or http, got ${controlPlaneType}`,
     );
   }
+  const httpRunnerToken =
+    controlPlaneType === "http"
+      ? optionalString(controlPlaneRecord, "runnerToken")
+      : undefined;
+  const httpHeaders =
+    controlPlaneType === "http" && controlPlaneRecord.headers !== undefined
+      ? parseStringMap(controlPlaneRecord.headers, "controlPlane.headers", false)
+      : undefined;
+  if (httpRunnerToken && httpHeaders && hasAuthorizationHeader(httpHeaders)) {
+    throw new RunnerConfigError(
+      "controlPlane.runnerToken must not be combined with controlPlane.headers authorization",
+    );
+  }
 
   return {
     identity,
@@ -141,15 +155,8 @@ export function parseRunnerConfig(
         : {
             type: "http",
             baseUrl: requiredString(controlPlaneRecord, "baseUrl", "controlPlane"),
-            ...(controlPlaneRecord.headers !== undefined
-              ? {
-                  headers: parseStringMap(
-                    controlPlaneRecord.headers,
-                    "controlPlane.headers",
-                    false,
-                  ),
-                }
-              : {}),
+            ...(httpRunnerToken !== undefined ? { runnerToken: httpRunnerToken } : {}),
+            ...(httpHeaders !== undefined ? { headers: httpHeaders } : {}),
           },
     ...(nitelyCommand !== undefined ? { nitelyCommand } : {}),
     repositoryPaths: parsePathMap(root.repositoryPaths, "repositoryPaths", baseDir),
@@ -171,6 +178,7 @@ export function createConfiguredRunnerComponents(
         })
       : new HttpRunnerControlPlaneClient({
           baseUrl: input.config.controlPlane.baseUrl,
+          runnerToken: input.config.controlPlane.runnerToken,
           headers: input.config.controlPlane.headers,
           fetch: input.fetch,
         });
@@ -313,6 +321,10 @@ function optionalString(
     throw new RunnerConfigError(`${key} must be a non-empty string`);
   }
   return value;
+}
+
+function hasAuthorizationHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((key) => key.toLowerCase() === "authorization");
 }
 
 async function sleepDuration(durationMs: number): Promise<void> {

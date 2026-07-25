@@ -16,6 +16,7 @@ export type RunnerFetch = (
 
 export interface HttpRunnerControlPlaneClientOptions {
   baseUrl: string;
+  runnerToken?: string;
   headers?: Record<string, string>;
   fetch?: RunnerFetch;
 }
@@ -38,7 +39,7 @@ export class HttpRunnerControlPlaneClient
     this.#baseUrl = new URL(
       options.baseUrl.endsWith("/") ? options.baseUrl : `${options.baseUrl}/`,
     );
-    this.#headers = options.headers ?? {};
+    this.#headers = httpHeaders(options.headers, options.runnerToken);
     this.#fetch = options.fetch ?? fetch;
   }
 
@@ -161,4 +162,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function httpHeaders(
+  headers: Record<string, string> = {},
+  runnerToken?: string,
+): Record<string, string> {
+  const result = { ...headers };
+  if (!runnerToken) {
+    return result;
+  }
+  for (const key of Object.keys(result)) {
+    if (key.toLowerCase() === "authorization") {
+      delete result[key];
+    }
+  }
+  return { ...result, authorization: `Bearer ${runnerToken}` };
 }
