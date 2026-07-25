@@ -36,8 +36,9 @@ clients in place. A local Nitely CLI executor can now hand an assignment to
 `nitely run` when the runner has a local `repoId -> path` mapping, a flow path,
 and local-file inputs. `loadRunnerConfig`, `registerConfiguredRunner`,
 `runConfiguredAssignmentCycle`, `nitely-runner register --config <path>`, and
-`nitely-runner run-once --config <path>` provide the first file-backed and HTTP
-local runner loop before daemon transport. Executors can also return artifact
+`nitely-runner run-once --config <path>` provide deterministic one-shot
+rehearsal. `nitely-runner run-loop --config <path>` is the first long-running
+poll loop before service installation. Executors can also return artifact
 metadata as `evidenceArtifacts`; the runner reports it through metadata-only
 `evidence.reported` events. The control-plane client interface also polls
 inbound control-plane events such as cooperative `task.cancel_requested`

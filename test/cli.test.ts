@@ -91,6 +91,47 @@ describe("runner CLI", () => {
     ]);
   });
 
+  it("runs a bounded configured runner loop", async () => {
+    const { configPath } = await fixture();
+    const stdout = textWriter();
+    const stderr = textWriter();
+    const calls: NitelyCommandInvocation[] = [];
+
+    const code = await runRunnerCli(
+      [
+        "run-loop",
+        "--config",
+        configPath,
+        "--max-cycles",
+        "2",
+        "--poll-interval-ms",
+        "1",
+      ],
+      {
+        stdout,
+        stderr,
+        now: fixedNow,
+        sleep: async () => {},
+        createId: (kind) => `cli-loop-${kind}`,
+        runCommand: async (invocation) => {
+          calls.push(invocation);
+          return { exitCode: 0, stdout: "RUN run-cli-loop completed\n", stderr: "" };
+        },
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(stdout.text).toContain("runner loop cycle=1");
+    expect(stdout.text).toContain(
+      "runner cycle handled task=task-1 status=succeeded events=4 rejected=0",
+    );
+    expect(stdout.text).toContain("runner loop cycle=2");
+    expect(stdout.text).toContain("runner cycle idle");
+    expect(stdout.text).toContain("runner loop stopped cycles=2");
+    expect(stderr.text).toBe("");
+    expect(calls).toHaveLength(1);
+  });
+
   it("returns usage errors without running a cycle", async () => {
     const stdout = textWriter();
     const stderr = textWriter();

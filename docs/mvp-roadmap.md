@@ -24,7 +24,8 @@
 ## M1: Local Development Runner
 
 - Start a runner process from the command line. (`register --config` and
-  `run-once --config` exist.)
+  `run-once --config` exist; `run-loop --config` provides the first polling
+  process.)
 - Load a local config file. (Library and CLI support exist.)
 - Register against a mock or HTTP control plane. (File-backed and HTTP clients
   support `registerRunner`.)

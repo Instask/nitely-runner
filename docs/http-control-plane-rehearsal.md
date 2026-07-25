@@ -88,6 +88,14 @@ From `nitely-runner`:
 nitely-runner run-once --config runner.http.local.json
 ```
 
+For a polling process, use:
+
+```bash
+nitely-runner run-loop --config runner.http.local.json
+```
+
+`--max-cycles <n>` can bound the loop during local rehearsals and tests.
+
 Expected successful output:
 
 ```text

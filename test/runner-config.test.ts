@@ -15,6 +15,7 @@ import {
   loadRunnerConfig,
   parseRunnerConfig,
   runConfiguredAssignmentCycle,
+  runConfiguredRunnerLoop,
   runConfiguredRunnerOnce,
 } from "../src/runner-config.js";
 import type { RunnerFetch } from "../src/http-control-plane.js";
@@ -200,6 +201,44 @@ describe("runner config", () => {
     expect(JSON.parse(String(fetchCalls[4]?.init?.body)).events).toMatchObject([
       { kind: "runner.heartbeat", payload: { status: "idle" } },
     ]);
+  });
+
+  it("runs a bounded file-backed runner loop", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nitely-runner-loop-config-"));
+    const repoPath = join(dir, "repo");
+    const statePath = join(dir, "state", "control-plane.json");
+    await mkdir(repoPath, { recursive: true });
+    await mkdir(join(dir, "state"), { recursive: true });
+    await writeFile(statePath, JSON.stringify(fileState(), null, 2), "utf8");
+    const config = parseRunnerConfig(
+      {
+        identity,
+        controlPlane: { type: "file", path: statePath },
+        repositoryPaths: { "repo-1": repoPath },
+        flowPaths: { "flow-1": "flows/implement.json" },
+      },
+      dir,
+    );
+    const calls: NitelyCommandInvocation[] = [];
+
+    const result = await runConfiguredRunnerLoop({
+      config,
+      maxCycles: 2,
+      pollIntervalMs: 1,
+      sleep: async () => {},
+      now: fixedNow,
+      createId: (kind) => `loop-${kind}`,
+      runCommand: async (invocation) => {
+        calls.push(invocation);
+        return { exitCode: 0, stdout: "RUN run-loop completed\n", stderr: "" };
+      },
+    });
+
+    expect(result.cycles.map((cycle) => cycle.cycle.status)).toEqual([
+      "handled",
+      "idle",
+    ]);
+    expect(calls).toHaveLength(1);
   });
 
   it("rejects unsupported control-plane types", () => {

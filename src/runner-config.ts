@@ -57,6 +57,21 @@ export interface RunConfiguredRunnerOnceResult {
   heartbeatReports: RunnerEventReportResult[];
 }
 
+export interface RunConfiguredRunnerLoopInput
+  extends RunConfiguredAssignmentCycleInput {
+  maxCycles?: number;
+  pollIntervalMs?: number;
+  sleep?: (durationMs: number) => Promise<void>;
+  onCycle?: (
+    result: RunConfiguredRunnerOnceResult,
+    cycleIndex: number,
+  ) => Promise<void> | void;
+}
+
+export interface RunConfiguredRunnerLoopResult {
+  cycles: RunConfiguredRunnerOnceResult[];
+}
+
 export interface RegisterConfiguredRunnerInput {
   config: RunnerConfig;
   fetch?: RunnerFetch;
@@ -222,6 +237,25 @@ export async function runConfiguredRunnerOnce(
   return { cycle, heartbeatReports };
 }
 
+export async function runConfiguredRunnerLoop(
+  input: RunConfiguredRunnerLoopInput,
+): Promise<RunConfiguredRunnerLoopResult> {
+  const cycles: RunConfiguredRunnerOnceResult[] = [];
+  const maxCycles = input.maxCycles ?? Number.POSITIVE_INFINITY;
+  const pollIntervalMs = input.pollIntervalMs ?? 5_000;
+  const sleep = input.sleep ?? sleepDuration;
+  for (let cycleIndex = 1; cycleIndex <= maxCycles; cycleIndex += 1) {
+    const result = await runConfiguredRunnerOnce(input);
+    cycles.push(result);
+    await input.onCycle?.(result, cycleIndex);
+    if (cycleIndex >= maxCycles) {
+      break;
+    }
+    await sleep(pollIntervalMs);
+  }
+  return { cycles };
+}
+
 function parsePathMap(
   value: unknown,
   name: string,
@@ -279,6 +313,10 @@ function optionalString(
     throw new RunnerConfigError(`${key} must be a non-empty string`);
   }
   return value;
+}
+
+async function sleepDuration(durationMs: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
 function requiredStringArray(
