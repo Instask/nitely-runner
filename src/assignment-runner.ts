@@ -79,6 +79,7 @@ export type RunnerOutboundEventKind =
   | "task.rejected"
   | "run.preparing"
   | "run.started"
+  | "stage.updated"
   | "run.blocked"
   | "run.completed"
   | "run.failed"

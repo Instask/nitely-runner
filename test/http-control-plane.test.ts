@@ -143,6 +143,47 @@ describe("HttpRunnerControlPlaneClient", () => {
     });
   });
 
+  it("reports stage update events defined by the public runner protocol", async () => {
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const event: RunnerOutboundEvent = {
+      eventId: "stage-updated-1",
+      schemaVersion: RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
+      tenantId: identity.tenantId,
+      runnerId: identity.runnerId,
+      taskId: "task-1",
+      runId: "run-1",
+      sequence: 3,
+      createdAt: "2026-07-25T01:04:00.000Z",
+      kind: "stage.updated",
+      payload: {
+        runId: "run-1",
+        taskId: "task-1",
+        stageId: "test",
+        attempt: 1,
+        status: "running",
+      },
+      redactionStatus: "metadata_only",
+      policyVersion: identity.policyVersion,
+    };
+    const client = new HttpRunnerControlPlaneClient({
+      baseUrl: "https://control.example/api",
+      fetch: fakeFetch(calls, {
+        acceptedEventIds: ["stage-updated-1"],
+        duplicateEventIds: [],
+        rejectedEvents: [],
+      }),
+    });
+
+    await expect(client.reportEvents([event])).resolves.toEqual({
+      acceptedEventIds: ["stage-updated-1"],
+      duplicateEventIds: [],
+      rejectedEvents: [],
+    });
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+      events: [event],
+    });
+  });
+
   it("polls queued control-plane events with runner identity query parameters", async () => {
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
     const client = new HttpRunnerControlPlaneClient({
