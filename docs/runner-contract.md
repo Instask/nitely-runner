@@ -117,8 +117,9 @@ Structured remote inputs are intentionally rejected until a connector-specific
 materialization step exists. The executor reports only safe metadata: run id,
 change request URL, flow id/path, and source revision.
 
-`loadRunnerConfig` normalizes local runner configuration from JSON. Relative
-control-plane state paths and repository paths resolve from the config file
+`loadRunnerConfig` normalizes local runner configuration from JSON. It supports
+file-backed control-plane state and HTTP control-plane endpoints. Relative
+file-backed state paths and repository paths resolve from the config file
 directory; flow paths stay repo-relative so `nitely run` resolves them inside
 the target checkout.
 

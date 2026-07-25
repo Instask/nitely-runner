@@ -9,6 +9,10 @@ import {
 } from "./assignment-runner.js";
 import { FileRunnerControlPlaneClient } from "./file-control-plane.js";
 import {
+  HttpRunnerControlPlaneClient,
+  type RunnerFetch,
+} from "./http-control-plane.js";
+import {
   LocalNitelyCliExecutor,
   type NitelyCommandRunner,
 } from "./local-nitely-executor.js";
@@ -18,9 +22,19 @@ export interface FileControlPlaneConfig {
   path: string;
 }
 
+export interface HttpControlPlaneConfig {
+  type: "http";
+  baseUrl: string;
+  headers?: Record<string, string>;
+}
+
+export type ControlPlaneConfig =
+  | FileControlPlaneConfig
+  | HttpControlPlaneConfig;
+
 export interface RunnerConfig {
   identity: RunnerIdentity;
-  controlPlane: FileControlPlaneConfig;
+  controlPlane: ControlPlaneConfig;
   nitelyCommand?: string;
   repositoryPaths: Record<string, string>;
   flowPaths: Record<string, string>;
@@ -32,11 +46,12 @@ export interface RunConfiguredAssignmentCycleInput {
   now?: () => Date;
   createId?: (kind: RunnerOutboundEventKind) => string;
   runCommand?: NitelyCommandRunner;
+  fetch?: RunnerFetch;
 }
 
 export interface ConfiguredRunnerComponents {
   identity: RunnerIdentity;
-  client: FileRunnerControlPlaneClient;
+  client: FileRunnerControlPlaneClient | HttpRunnerControlPlaneClient;
   executor: LocalNitelyCliExecutor;
 }
 
@@ -78,21 +93,36 @@ export function parseRunnerConfig(
     "type",
     "controlPlane",
   );
-  if (controlPlaneType !== "file") {
+  if (controlPlaneType !== "file" && controlPlaneType !== "http") {
     throw new RunnerConfigError(
-      `controlPlane.type must be file, got ${controlPlaneType}`,
+      `controlPlane.type must be file or http, got ${controlPlaneType}`,
     );
   }
 
   return {
     identity,
-    controlPlane: {
-      type: "file",
-      path: resolvePath(
-        baseDir,
-        requiredString(controlPlaneRecord, "path", "controlPlane"),
-      ),
-    },
+    controlPlane:
+      controlPlaneType === "file"
+        ? {
+            type: "file",
+            path: resolvePath(
+              baseDir,
+              requiredString(controlPlaneRecord, "path", "controlPlane"),
+            ),
+          }
+        : {
+            type: "http",
+            baseUrl: requiredString(controlPlaneRecord, "baseUrl", "controlPlane"),
+            ...(controlPlaneRecord.headers !== undefined
+              ? {
+                  headers: parseStringMap(
+                    controlPlaneRecord.headers,
+                    "controlPlane.headers",
+                    false,
+                  ),
+                }
+              : {}),
+          },
     ...(nitelyCommand !== undefined ? { nitelyCommand } : {}),
     repositoryPaths: parsePathMap(root.repositoryPaths, "repositoryPaths", baseDir),
     flowPaths: parseStringMap(root.flowPaths, "flowPaths", false),
@@ -101,11 +131,21 @@ export function parseRunnerConfig(
 }
 
 export function createConfiguredRunnerComponents(
-  input: Pick<RunConfiguredAssignmentCycleInput, "config" | "runCommand">,
+  input: Pick<
+    RunConfiguredAssignmentCycleInput,
+    "config" | "runCommand" | "fetch"
+  >,
 ): ConfiguredRunnerComponents {
-  const client = new FileRunnerControlPlaneClient({
-    path: input.config.controlPlane.path,
-  });
+  const client =
+    input.config.controlPlane.type === "file"
+      ? new FileRunnerControlPlaneClient({
+          path: input.config.controlPlane.path,
+        })
+      : new HttpRunnerControlPlaneClient({
+          baseUrl: input.config.controlPlane.baseUrl,
+          headers: input.config.controlPlane.headers,
+          fetch: input.fetch,
+        });
   const executor = new LocalNitelyCliExecutor({
     command: input.config.nitelyCommand,
     repositoryPaths: input.config.repositoryPaths,

@@ -15,6 +15,7 @@ import {
   parseRunnerConfig,
   runConfiguredAssignmentCycle,
 } from "../src/runner-config.js";
+import type { RunnerFetch } from "../src/http-control-plane.js";
 import type { NitelyCommandInvocation } from "../src/local-nitely-executor.js";
 
 const fixedNow = () => new Date("2026-07-25T01:02:03.000Z");
@@ -106,14 +107,56 @@ describe("runner config", () => {
     ]);
   });
 
+  it("runs one HTTP-backed assignment cycle from config", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nitely-runner-http-config-"));
+    const repoPath = join(dir, "repo");
+    await mkdir(repoPath, { recursive: true });
+    const fetchCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const commandCalls: NitelyCommandInvocation[] = [];
+    const config = parseRunnerConfig(
+      {
+        identity,
+        controlPlane: {
+          type: "http",
+          baseUrl: "https://control.example/api",
+          headers: { authorization: "Bearer runner-token" },
+        },
+        repositoryPaths: { "repo-1": repoPath },
+      },
+      dir,
+    );
+
+    const result = await runConfiguredAssignmentCycle({
+      config,
+      now: fixedNow,
+      createId: (kind) => `http-${kind}`,
+      fetch: fakeFetch(fetchCalls),
+      runCommand: async (invocation) => {
+        commandCalls.push(invocation);
+        return { exitCode: 0, stdout: "RUN run-http completed\n", stderr: "" };
+      },
+    });
+
+    expect(result.status).toBe("handled");
+    expect(commandCalls).toHaveLength(1);
+    expect(fetchCalls.map((call) => call.url)).toEqual([
+      "https://control.example/api/runner/assignments?tenantId=tenant-1&runnerId=runner-1",
+      "https://control.example/api/runner/events",
+    ]);
+    expect(fetchCalls[0]?.init).toMatchObject({
+      headers: { authorization: "Bearer runner-token" },
+    });
+    expect(JSON.parse(String(fetchCalls[1]?.init?.body)).events).toHaveLength(4);
+  });
+
   it("rejects unsupported control-plane types", () => {
     expect(() =>
       parseRunnerConfig({
         identity,
-        controlPlane: { type: "http", path: "state.json" },
+        controlPlane: { type: "queue", path: "state.json" },
         repositoryPaths: { "repo-1": "/repo" },
       }),
-    ).toThrow("controlPlane.type must be file");
+    ).toThrow("controlPlane.type must be file or http");
   });
 });
 
@@ -180,5 +223,36 @@ function assignmentEvent(): RunnerAssignmentEvent {
       inputs: { spec: "docs/spec.md" },
       policyVersion: identity.policyVersion,
     },
+  };
+}
+
+function fakeFetch(
+  calls: Array<{ url: string; init: RequestInit | undefined }>,
+): RunnerFetch {
+  return async (url, init) => {
+    calls.push({ url: url.toString(), init });
+    if (init?.method === "GET") {
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ assignments: [assignmentEvent()] }),
+      };
+    }
+    return {
+      ok: true,
+      status: 202,
+      statusText: "Accepted",
+      json: async () => ({
+        acceptedEventIds: [
+          "http-task.accepted",
+          "http-run.preparing",
+          "http-run.started",
+          "http-run.completed",
+        ],
+        duplicateEventIds: [],
+        rejectedEvents: [],
+      }),
+    };
   };
 }
