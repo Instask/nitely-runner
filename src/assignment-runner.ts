@@ -43,6 +43,7 @@ export interface RunnerRepositoryRef {
 }
 
 export type RunnerOutboundEventKind =
+  | "runner.heartbeat"
   | "task.accepted"
   | "task.rejected"
   | "run.preparing"
@@ -202,6 +203,7 @@ export async function runOneAssignmentCycle(
         ? { sourceRevision: assignment.sourceRevision }
         : {}),
       flowId: assignment.flowId,
+      ...(assignment.flowPath ? { flowPath: assignment.flowPath } : {}),
       policyVersion: input.identity.policyVersion,
     },
   });
@@ -222,6 +224,7 @@ export async function runOneAssignmentCycle(
         ? { sourceRevision: assignment.sourceRevision }
         : {}),
       flowId: assignment.flowId,
+      ...(assignment.flowPath ? { flowPath: assignment.flowPath } : {}),
     },
   });
   events.push(preparing);
@@ -359,6 +362,9 @@ function createStartedEvent(input: {
         ? { sourceRevision: input.assignment.sourceRevision }
         : {}),
       flowId: input.assignment.flowId,
+      ...(input.assignment.flowPath
+        ? { flowPath: input.assignment.flowPath }
+        : {}),
     },
   });
 }

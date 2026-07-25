@@ -10,6 +10,8 @@
 - Provide an in-memory control-plane client for deterministic local rehearsal.
 - Add a local Nitely CLI executor that invokes `nitely run` from runner-local
   repository mapping, flow path, source revision, and local-file input metadata.
+- Add a file-backed control-plane client and config loader for deterministic
+  local runner loops.
 - Consume the public `nitely/runner-control-plane/*` contract once the OSS
   package is published or available as a workspace dependency.
 - Decide whether the first transport is polling, websocket, or queue-backed.
@@ -18,9 +20,9 @@
 ## M1: Local Development Runner
 
 - Start a runner process from the command line.
-- Load a local config file.
+- Load a local config file. (Library support exists; CLI wrapper remains.)
 - Register against a mock control plane.
-- Accept one assignment.
+- Accept one assignment. (File-backed library loop exists.)
 - Report accepted, preparing, started, blocked, completed, failed, cancelled,
   and rejected events through the protocol client.
 - Execute an OSS Flow locally through `nitely run`.

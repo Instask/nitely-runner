@@ -89,6 +89,12 @@ development stubs.
 pending assignments in memory, records reported runner events, deduplicates by
 event id, and removes assignments after `task.accepted` or `task.rejected`.
 
+`FileRunnerControlPlaneClient` consumes the same JSON state shape as the
+`nitely-oss` file-backed protocol stub. It polls assigned tasks, records runner
+events, applies assignment status projection, deduplicates replayed event ids,
+and rejects metadata-only events that contain raw logs, prompts, source, or
+secret-like payload fields.
+
 `LocalNitelyCliExecutor` is the initial OSS runtime bridge. It invokes
 `nitely run <flow> --repo <path> --input <name>=<path>` after resolving:
 
@@ -101,6 +107,11 @@ event id, and removes assignments after `task.accepted` or `task.rejected`.
 Structured remote inputs are intentionally rejected until a connector-specific
 materialization step exists. The executor reports only safe metadata: run id,
 change request URL, flow id/path, and source revision.
+
+`loadRunnerConfig` normalizes local runner configuration from JSON. Relative
+control-plane state paths and repository paths resolve from the config file
+directory; flow paths stay repo-relative so `nitely run` resolves them inside
+the target checkout.
 
 Raw command logs and artifact bytes should be uploaded only when policy allows
 it. Metadata-first streaming is the default.

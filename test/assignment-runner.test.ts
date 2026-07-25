@@ -129,6 +129,13 @@ describe("runOneAssignmentCycle", () => {
       .toBe(true);
     expect(result.reportedEvents[0]?.payload).toMatchObject({
       sourceRevision: "abc123",
+      flowPath: "flows/flow-1.json",
+    });
+    expect(result.reportedEvents[1]?.payload).toMatchObject({
+      flowPath: "flows/flow-1.json",
+    });
+    expect(result.reportedEvents[2]?.payload).toMatchObject({
+      flowPath: "flows/flow-1.json",
     });
     expect(reports).toHaveLength(1);
   });

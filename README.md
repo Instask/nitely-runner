@@ -31,11 +31,11 @@ supervision needed to coordinate with a control plane.
 ## Current Status
 
 Protocol and MVP planning, with the first local lifecycle projection helper,
-single-assignment poll/execute/report rehearsal, and in-memory control-plane
-client in place. A local Nitely CLI executor can now hand an assignment to
+single-assignment poll/execute/report rehearsal, and local control-plane
+clients in place. A local Nitely CLI executor can now hand an assignment to
 `nitely run` when the runner has a local `repoId -> path` mapping, a flow path,
-and local-file inputs. Start with contract code and file/local mocks before
-daemon transport.
+and local-file inputs. `loadRunnerConfig` and `runConfiguredAssignmentCycle`
+provide the first file-backed local runner loop before daemon transport.
 
 - [docs/runner-contract.md](docs/runner-contract.md)
 - [docs/mvp-roadmap.md](docs/mvp-roadmap.md)

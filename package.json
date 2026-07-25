@@ -17,6 +17,10 @@
       "types": "./dist/assignment-runner.d.ts",
       "default": "./dist/assignment-runner.js"
     },
+    "./file-control-plane": {
+      "types": "./dist/file-control-plane.d.ts",
+      "default": "./dist/file-control-plane.js"
+    },
     "./local-nitely-executor": {
       "types": "./dist/local-nitely-executor.d.ts",
       "default": "./dist/local-nitely-executor.js"
@@ -24,6 +28,10 @@
     "./memory-control-plane": {
       "types": "./dist/memory-control-plane.d.ts",
       "default": "./dist/memory-control-plane.js"
+    },
+    "./runner-config": {
+      "types": "./dist/runner-config.d.ts",
+      "default": "./dist/runner-config.js"
     }
   },
   "engines": {
