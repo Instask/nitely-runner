@@ -113,6 +113,59 @@ describe("FileRunnerControlPlaneClient", () => {
     });
   });
 
+  it("projects evidence metadata without changing assignment status", async () => {
+    const { path } = await fixture();
+    const client = new FileRunnerControlPlaneClient({ path });
+    await client.reportEvents([
+      runnerEvent("run.started", {
+        eventId: "started-1",
+        runId: "run-1",
+        payload: {
+          taskId: "task-1",
+          runId: "run-1",
+          repoId: "repo-1",
+          flowId: "flow-1",
+        },
+      }),
+      runnerEvent("evidence.reported", {
+        eventId: "evidence-1",
+        runId: "run-1",
+        payload: {
+          taskId: "task-1",
+          runId: "run-1",
+          artifacts: [
+            {
+              artifactId: "artifact-1",
+              kind: "test-summary",
+              uri: "nitely://runs/run-1/artifacts/unit-test-summary",
+            },
+          ],
+        },
+      }),
+    ]);
+
+    await expect(readFileRunnerControlPlaneState(path)).resolves.toMatchObject({
+      assignments: {
+        "tenant-1:task-1": {
+          status: "running",
+          latestRunId: "run-1",
+          evidence: [
+            {
+              runId: "run-1",
+              redactionStatus: "metadata_only",
+              artifacts: [
+                {
+                  artifactId: "artifact-1",
+                  kind: "test-summary",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+  });
+
   it("rejects raw payload keys for metadata-only events", async () => {
     const { path } = await fixture();
     const client = new FileRunnerControlPlaneClient({ path });

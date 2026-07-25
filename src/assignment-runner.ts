@@ -81,6 +81,7 @@ export type RunnerOutboundEventKind =
   | "run.completed"
   | "run.failed"
   | "run.cancelled"
+  | "evidence.reported"
   | "runner.error";
 
 export interface RunnerProtocolEvent<
@@ -123,12 +124,21 @@ export interface RunnerControlPlaneClient {
   reportEvents(events: RunnerOutboundEvent[]): Promise<RunnerEventReportResult>;
 }
 
+export interface RunnerEvidenceArtifactMetadata {
+  [key: string]: unknown;
+  artifactId: string;
+  kind?: string;
+  name?: string;
+  uri?: string;
+}
+
 export type RunnerExecutionResult =
   | {
       status: "succeeded";
       runId: string;
       changeRequestUrl?: string;
       evidenceSummary?: unknown;
+      evidenceArtifacts?: RunnerEvidenceArtifactMetadata[];
     }
   | {
       status: "blocked";
@@ -286,6 +296,19 @@ export async function runOneAssignmentCycle(
     projection = applyRunnerLifecycleEvent(projection, toLifecycleEvent(started));
   }
 
+  const evidence = createEvidenceReportedEvent({
+    identity: input.identity,
+    assignment,
+    execution,
+    sequence: nextSequence,
+    now: input.now,
+    createId: input.createId,
+  });
+  if (evidence) {
+    events.push(evidence);
+    nextSequence += 1;
+  }
+
   const terminal = createTerminalEvent({
     identity: input.identity,
     assignment,
@@ -394,6 +417,37 @@ function createStartedEvent(input: {
       ...(input.assignment.flowPath
         ? { flowPath: input.assignment.flowPath }
         : {}),
+    },
+  });
+}
+
+function createEvidenceReportedEvent(input: {
+  identity: RunnerIdentity;
+  assignment: RunnerAssignmentPayload;
+  execution: RunnerExecutionResult;
+  sequence: number;
+  now?: () => Date;
+  createId?: (kind: RunnerOutboundEventKind) => string;
+}): RunnerOutboundEvent | undefined {
+  if (
+    input.execution.status !== "succeeded" ||
+    input.execution.evidenceArtifacts === undefined ||
+    input.execution.evidenceArtifacts.length === 0
+  ) {
+    return undefined;
+  }
+  return createRunnerEvent({
+    identity: input.identity,
+    kind: "evidence.reported",
+    taskId: input.assignment.taskId,
+    runId: input.execution.runId,
+    sequence: input.sequence,
+    now: input.now,
+    createId: input.createId,
+    payload: {
+      runId: input.execution.runId,
+      taskId: input.assignment.taskId,
+      artifacts: input.execution.evidenceArtifacts,
     },
   });
 }

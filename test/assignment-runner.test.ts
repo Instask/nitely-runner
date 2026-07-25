@@ -105,6 +105,14 @@ describe("runOneAssignmentCycle", () => {
           runId: `run-${task.taskId}`,
           changeRequestUrl: "https://github.com/Instask/example/pull/1",
           evidenceSummary: { artifacts: 2 },
+          evidenceArtifacts: [
+            {
+              artifactId: "artifact-1",
+              kind: "test-summary",
+              name: "unit test summary",
+              uri: "nitely://runs/run-task-1/artifacts/unit-test-summary",
+            },
+          ],
         }),
       },
     });
@@ -117,12 +125,13 @@ describe("runOneAssignmentCycle", () => {
       taskId: "task-1",
       status: "succeeded",
       runId: "run-task-1",
-      lastSequence: 4,
+      lastSequence: 5,
     });
     expect(result.reportedEvents.map((event) => event.kind)).toEqual([
       "task.accepted",
       "run.preparing",
       "run.started",
+      "evidence.reported",
       "run.completed",
     ]);
     expect(result.reportedEvents.every((event) => event.redactionStatus === "metadata_only"))
@@ -136,6 +145,19 @@ describe("runOneAssignmentCycle", () => {
     });
     expect(result.reportedEvents[2]?.payload).toMatchObject({
       flowPath: "flows/flow-1.json",
+    });
+    expect(result.reportedEvents[3]).toMatchObject({
+      kind: "evidence.reported",
+      runId: "run-task-1",
+      payload: {
+        runId: "run-task-1",
+        artifacts: [
+          {
+            artifactId: "artifact-1",
+            kind: "test-summary",
+          },
+        ],
+      },
     });
     expect(reports).toHaveLength(1);
   });

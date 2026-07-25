@@ -125,6 +125,11 @@ Structured remote inputs are intentionally rejected until a connector-specific
 materialization step exists. The executor reports only safe metadata: run id,
 change request URL, flow id/path, and source revision.
 
+Executors may return `evidenceArtifacts` when they have artifact metadata that
+is safe to share. The runner reports those entries as a metadata-only
+`evidence.reported` event before terminal completion, while keeping raw logs,
+prompts, diffs, source, and artifact bytes out of the default upload boundary.
+
 `loadRunnerConfig` normalizes local runner configuration from JSON. It supports
 file-backed control-plane state and HTTP control-plane endpoints. Relative
 file-backed state paths and repository paths resolve from the config file

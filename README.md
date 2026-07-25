@@ -37,7 +37,9 @@ clients in place. A local Nitely CLI executor can now hand an assignment to
 and local-file inputs. `loadRunnerConfig`, `registerConfiguredRunner`,
 `runConfiguredAssignmentCycle`, `nitely-runner register --config <path>`, and
 `nitely-runner run-once --config <path>` provide the first file-backed and HTTP
-local runner loop before daemon transport.
+local runner loop before daemon transport. Executors can also return artifact
+metadata as `evidenceArtifacts`; the runner reports it through metadata-only
+`evidence.reported` events.
 
 - [docs/runner-contract.md](docs/runner-contract.md)
 - [docs/mvp-roadmap.md](docs/mvp-roadmap.md)

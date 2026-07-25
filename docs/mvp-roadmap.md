@@ -29,6 +29,7 @@
 - Accept one assignment. (File-backed library loop exists.)
 - Report accepted, preparing, started, blocked, completed, failed, cancelled,
   and rejected events through the protocol client.
+- Report executor-provided artifact metadata through `evidence.reported`.
 - Execute an OSS Flow locally through `nitely run`.
 - Persist local run state and emit lifecycle events.
 
