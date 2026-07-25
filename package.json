@@ -1,9 +1,26 @@
 {
   "name": "@nitely/runner",
   "version": "0.1.0",
+  "description": "Customer-hosted Nitely runner daemon for local assignment execution and runner/control-plane protocol rehearsal.",
   "private": false,
   "license": "Apache-2.0",
   "type": "module",
+  "keywords": [
+    "ai",
+    "agent",
+    "developer-tools",
+    "runner",
+    "control-plane",
+    "automation"
+  ],
+  "homepage": "https://github.com/Instask/nitely-runner#readme",
+  "bugs": {
+    "url": "https://github.com/Instask/nitely-runner/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Instask/nitely-runner.git"
+  },
   "publishConfig": {
     "access": "public"
   },
