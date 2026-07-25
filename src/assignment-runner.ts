@@ -773,7 +773,12 @@ async function watchCancellationRequests(input: {
       try {
         const events = await input.client.pollControlPlaneEvents(input.identity);
         const cancellation = events.find((event) =>
-          isMatchingCancellationRequest(event, input.assignment, runId),
+          isMatchingCancellationRequest(
+            event,
+            input.identity,
+            input.assignment,
+            runId,
+          ),
         );
         if (cancellation) {
           input.onCancel(cancellation);
@@ -791,13 +796,42 @@ async function watchCancellationRequests(input: {
 
 function isMatchingCancellationRequest(
   event: RunnerInboundEvent,
+  identity: RunnerIdentity,
   assignment: RunnerAssignmentPayload,
   runId: string,
 ): boolean {
   return (
+    isValidInboundControlPlaneEvent(event, identity) &&
     event.kind === "task.cancel_requested" &&
     event.taskId === assignment.taskId &&
     (event.runId === undefined || event.runId === runId)
+  );
+}
+
+function isValidInboundControlPlaneEvent(
+  event: RunnerInboundEvent,
+  identity: RunnerIdentity,
+): boolean {
+  return (
+    event.schemaVersion === RUNNER_CONTROL_PLANE_SCHEMA_VERSION &&
+    event.tenantId === identity.tenantId &&
+    event.runnerId === identity.runnerId &&
+    event.policyVersion === identity.policyVersion &&
+    isProtocolSegment(event.eventId) &&
+    (event.taskId === undefined || isProtocolSegment(event.taskId)) &&
+    (event.runId === undefined || isProtocolSegment(event.runId)) &&
+    (event.sequence === undefined ||
+      (Number.isInteger(event.sequence) && event.sequence >= 0)) &&
+    typeof event.createdAt === "string" &&
+    !Number.isNaN(Date.parse(event.createdAt)) &&
+    isRecord(event.payload)
+  );
+}
+
+function isProtocolSegment(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,160}$/.test(value)
   );
 }
 

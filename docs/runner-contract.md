@@ -144,6 +144,10 @@ The assignment cycle reports accepted/preparing events before execution. When
 the executor observes a run id from streamed CLI output, the runner immediately
 reports `run.started`, then polls `pollControlPlaneEvents(identity)` while the
 subprocess remains active.
+Inbound control-plane events are acted on only when their envelope matches the
+current schema, tenant id, runner id, policy version, valid protocol ids, and a
+parseable timestamp. Malformed or stale-policy instructions are ignored rather
+than aborting the active run.
 
 Executors may return `evidenceArtifacts` when they have artifact metadata that
 is safe to share. The runner reports those entries as a metadata-only

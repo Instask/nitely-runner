@@ -382,6 +382,72 @@ describe("runOneAssignmentCycle", () => {
     ]);
   });
 
+  it("ignores cancellation requests whose control-plane envelope does not match the runner identity", async () => {
+    const { client } = fakeClient([assignment()]);
+    let releasePollLoop!: () => void;
+    let observePoll!: () => void;
+    let pollObserved = false;
+    const pollLoopPaused = new Promise<void>((resolve) => {
+      releasePollLoop = resolve;
+    });
+    const sawPoll = new Promise<void>((resolve) => {
+      observePoll = resolve;
+    });
+    const stalePolicyCancellation = {
+      ...cancellationRequest({ sequence: 4, runId: "run-stale-policy" }),
+      eventId: "stale-policy-cancel",
+      policyVersion: "policy-stale",
+    };
+    const inboundClient: RunnerControlPlaneClient = {
+      ...client,
+      pollControlPlaneEvents: async () => {
+        pollObserved = true;
+        observePoll();
+        return [stalePolicyCancellation];
+      },
+    };
+
+    const result = await runOneAssignmentCycle({
+      identity,
+      client: inboundClient,
+      now: fixedNow,
+      createId: (kind) => `inbound-envelope-${kind}`,
+      cancellationPollIntervalMs: 1,
+      sleep: async () => {
+        if (pollObserved) {
+          await pollLoopPaused;
+        }
+      },
+      executor: {
+        execute: async ({ signal, onRunStarted }) => {
+          await onRunStarted?.("run-stale-policy");
+          await sawPoll;
+          expect(signal?.aborted).toBe(false);
+          releasePollLoop();
+          return {
+            status: "succeeded",
+            runId: "run-stale-policy",
+          };
+        },
+      },
+    });
+
+    expect(result.status).toBe("handled");
+    if (result.status !== "handled") {
+      throw new Error("expected handled result");
+    }
+    expect(result.projection).toMatchObject({
+      status: "succeeded",
+      runId: "run-stale-policy",
+    });
+    expect(result.reportedEvents.map((event) => event.kind)).toEqual([
+      "task.accepted",
+      "run.preparing",
+      "run.started",
+      "run.completed",
+    ]);
+  });
+
   it("rehearses one assignment through the local Nitely CLI executor", async () => {
     const client = new MemoryRunnerControlPlaneClient([assignment()]);
     const executor = new LocalNitelyCliExecutor({
