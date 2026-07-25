@@ -101,3 +101,16 @@ assignment itself.
 
 If the control plane rejects an event, the CLI exits non-zero and prints each
 rejected event id, kind, and safe reason.
+
+## 6. Verify The Control-Plane Projection
+
+Use the run id printed by `run-once` to verify that the control plane accepted
+the terminal runner event and updated its run projection:
+
+```bash
+curl -sS "http://127.0.0.1:8787/runs/<run-id>?tenantId=tenant-1"
+```
+
+The response should include the run id, task id, repository id, flow path, and a
+terminal control-plane status such as `completed`. If the Nitely CLI printed a
+change request URL, the projection should include `changeRequestUrl` as well.
