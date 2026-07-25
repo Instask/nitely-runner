@@ -44,7 +44,9 @@ metadata as `evidenceArtifacts`; the runner reports it through metadata-only
 inbound control-plane events such as cooperative `task.cancel_requested`
 instructions, and the local CLI executor can abort an active `nitely run`
 subprocess when that request matches the current run. HTTP runner config
-supports a runner-scoped bearer token for protected control-plane routes.
+supports a runner-scoped bearer token for protected control-plane routes. The
+runner also rejects assignment metadata that tries to carry credentials or
+runner-local checkout paths before invoking the local executor.
 
 - [docs/runner-contract.md](docs/runner-contract.md)
 - [docs/mvp-roadmap.md](docs/mvp-roadmap.md)

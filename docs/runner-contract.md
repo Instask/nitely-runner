@@ -132,6 +132,12 @@ Structured remote inputs are intentionally rejected until a connector-specific
 materialization step exists. The executor reports only safe metadata: run id,
 change request URL, flow id/path, and source revision.
 
+The assignment cycle defensively rejects remote assignment metadata that carries
+credentialed clone URLs, runner-local checkout path fields, authorization
+headers, cookies, runner tokens, or secret-like input metadata. Rejected
+assignments produce a metadata-only `task.rejected` event and do not invoke the
+local executor.
+
 The assignment cycle reports accepted/preparing events before execution. When
 the executor observes a run id from streamed CLI output, the runner immediately
 reports `run.started`, then polls `pollControlPlaneEvents(identity)` while the

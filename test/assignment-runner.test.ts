@@ -190,6 +190,77 @@ describe("runOneAssignmentCycle", () => {
     ]);
   });
 
+  it("rejects assignment metadata with credentials or runner-local paths before execution", async () => {
+    const cases: Array<{
+      name: string;
+      assignment: RunnerAssignmentEvent;
+      expectedPath: string;
+    }> = [
+      {
+        name: "credentialed clone URL",
+        assignment: assignment({
+          repository: {
+            repoId: "repo-1",
+            cloneUrl:
+              "https://x-access-token:runner-secret@github.com/Instask/example.git",
+          },
+        }),
+        expectedPath: "assignment.repository.cloneUrl",
+      },
+      {
+        name: "authorization input",
+        assignment: assignment({
+          inputs: { authorization: "Bearer runner-secret" },
+        }),
+        expectedPath: "assignment.inputs.authorization",
+      },
+      {
+        name: "runner-local checkout path",
+        assignment: {
+          ...assignment(),
+          payload: {
+            ...assignment().payload,
+            localCheckoutPath: "/tmp/customer/repo",
+          },
+        },
+        expectedPath: "assignment.localCheckoutPath",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { client, reports } = fakeClient([testCase.assignment]);
+
+      const result = await runOneAssignmentCycle({
+        identity,
+        client,
+        now: fixedNow,
+        createId: (kind) => `${testCase.name}-${kind}`,
+        executor: {
+          execute: async () => {
+            throw new Error("executor should not run");
+          },
+        },
+      });
+
+      expect(result.status).toBe("handled");
+      if (result.status !== "handled") {
+        throw new Error("expected handled result");
+      }
+      expect(result.reportedEvents).toHaveLength(1);
+      expect(result.reportedEvents[0]).toMatchObject({
+        kind: "task.rejected",
+        payload: {
+          reason: "assignment_metadata_boundary",
+          safeMessage: expect.stringContaining(testCase.expectedPath),
+        },
+      });
+      expect(JSON.stringify(result.reportedEvents[0])).not.toContain(
+        "runner-secret",
+      );
+      expect(reports).toHaveLength(1);
+    }
+  });
+
   it("aborts an active assignment when a cancellation request is polled", async () => {
     const client = new MemoryRunnerControlPlaneClient([assignment()]);
     let observedSignal: AbortSignal | undefined;

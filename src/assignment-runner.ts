@@ -234,7 +234,11 @@ export async function runOneAssignmentCycle(
     return report;
   };
 
-  const reject = assignmentRejection(input.identity, assignment);
+  const reject = assignmentRejection(
+    input.identity,
+    assignment,
+    assignmentEvent.payload,
+  );
   if (reject) {
     const rejected = createRunnerEvent({
       identity: input.identity,
@@ -482,6 +486,7 @@ function parseAssignmentEvent(
 function assignmentRejection(
   identity: RunnerIdentity,
   assignment: RunnerAssignmentPayload,
+  rawPayload: Record<string, unknown>,
 ): { reason: string; safeMessage: string } | undefined {
   if (assignment.policyVersion !== identity.policyVersion) {
     return {
@@ -493,6 +498,13 @@ function assignmentRejection(
     return {
       reason: "repository_not_allowed",
       safeMessage: `repository ${assignment.repoId} is not allowed for runner ${identity.runnerId}`,
+    };
+  }
+  const boundaryViolations = findAssignmentBoundaryViolations(rawPayload);
+  if (boundaryViolations.length > 0) {
+    return {
+      reason: "assignment_metadata_boundary",
+      safeMessage: `assignment metadata contains disallowed fields: ${boundaryViolations.join(", ")}`,
     };
   }
   return undefined;
@@ -835,4 +847,119 @@ async function sleepUntilNextPoll(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const sensitiveAssignmentKeys = new Set([
+  "accessToken",
+  "adminToken",
+  "apiKey",
+  "auth",
+  "authorization",
+  "bearerToken",
+  "cookie",
+  "credential",
+  "credentials",
+  "password",
+  "privateKey",
+  "refreshToken",
+  "registrationSecret",
+  "runnerToken",
+  "secret",
+  "sessionCookie",
+  "sessionToken",
+  "token",
+]);
+
+function findAssignmentBoundaryViolations(
+  payload: Record<string, unknown>,
+): string[] {
+  const violations: string[] = [];
+  for (const key of Object.keys(payload)) {
+    if (isRunnerLocalPathKey(key) || sensitiveAssignmentKeys.has(key)) {
+      violations.push(`assignment.${key}`);
+    }
+  }
+  if (isRecord(payload.repository)) {
+    for (const key of Object.keys(payload.repository)) {
+      if (isRunnerLocalPathKey(key) || sensitiveAssignmentKeys.has(key)) {
+        violations.push(`assignment.repository.${key}`);
+      }
+    }
+    if (
+      typeof payload.repository.cloneUrl === "string" &&
+      isCredentialedUrl(payload.repository.cloneUrl)
+    ) {
+      violations.push("assignment.repository.cloneUrl");
+    }
+  }
+  if (isRecord(payload.inputs)) {
+    violations.push(
+      ...findSensitivePayloadPaths(payload.inputs, "assignment.inputs"),
+    );
+  }
+  return violations;
+}
+
+function findSensitivePayloadPaths(value: unknown, path: string): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      findSensitivePayloadPaths(item, `${path}[${index}]`),
+    );
+  }
+  if (typeof value === "string") {
+    return looksLikeSecret(value) ? [path] : [];
+  }
+  if (!isRecord(value)) {
+    return [];
+  }
+  return Object.entries(value).flatMap(([key, child]) => {
+    const childPath = `${path}.${key}`;
+    if (sensitiveAssignmentKeys.has(key)) {
+      return [childPath];
+    }
+    return findSensitivePayloadPaths(child, childPath);
+  });
+}
+
+function isRunnerLocalPathKey(key: string): boolean {
+  return [
+    "absolutePath",
+    "checkoutPath",
+    "localCheckoutPath",
+    "localPath",
+    "repositoryPath",
+    "repoPath",
+    "worktreePath",
+  ].includes(key);
+}
+
+function isCredentialedUrl(value: string): boolean {
+  if (looksLikeSecret(value)) {
+    return true;
+  }
+  try {
+    const url = new URL(value);
+    if (url.username || url.password) {
+      return true;
+    }
+    for (const key of url.searchParams.keys()) {
+      if (
+        sensitiveAssignmentKeys.has(key) ||
+        /token|secret|password|auth/i.test(key)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return /https?:\/\/[^/\s]+@/.test(value);
+  }
+}
+
+function looksLikeSecret(value: string): boolean {
+  return (
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(value) ||
+    /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/.test(value) ||
+    /\bsk-[A-Za-z0-9_-]{20,}\b/.test(value)
+  );
 }
