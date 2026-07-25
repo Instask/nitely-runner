@@ -1,9 +1,12 @@
 {
   "name": "@nitely/runner",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "license": "Apache-2.0",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "nitely-runner": "./dist/cli.js"
   },
