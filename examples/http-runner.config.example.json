@@ -2,6 +2,7 @@
   "identity": {
     "tenantId": "tenant-1",
     "runnerId": "runner-1",
+    "protocolVersion": "runner-control-plane.v1",
     "policyVersion": "policy-1",
     "allowedRepositories": ["repo-1"],
     "version": "0.1.0"

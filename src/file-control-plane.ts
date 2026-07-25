@@ -30,6 +30,7 @@ export type FileRunnerAssignmentStatus =
 export interface FileRunnerPolicySnapshot {
   tenantId: string;
   runnerId: string;
+  protocolVersion?: typeof RUNNER_CONTROL_PLANE_SCHEMA_VERSION;
   policyVersion: string;
   allowedRepositories: string[];
   allowedUploadRedactionStatuses?: RunnerRedactionStatus[];
@@ -141,6 +142,8 @@ export class FileRunnerControlPlaneClient
       policy: {
         tenantId: identity.tenantId,
         runnerId: identity.runnerId,
+        protocolVersion:
+          identity.protocolVersion ?? RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
         policyVersion: identity.policyVersion,
         allowedRepositories: [...identity.allowedRepositories],
       },

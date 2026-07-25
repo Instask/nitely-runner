@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 
 import {
+  RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
   runOneAssignmentCycle,
   type RunnerCycleResult,
   type RunnerIdentity,
@@ -104,10 +105,12 @@ export function parseRunnerConfig(
   const identityRecord = requireRecord(root.identity, "identity");
   const controlPlaneRecord = requireRecord(root.controlPlane, "controlPlane");
   const nitelyCommand = optionalString(root, "nitelyCommand");
+  const protocolVersion = parseProtocolVersion(identityRecord);
 
   const identity: RunnerIdentity = {
     tenantId: requiredString(identityRecord, "tenantId", "identity"),
     runnerId: requiredString(identityRecord, "runnerId", "identity"),
+    ...(protocolVersion !== undefined ? { protocolVersion } : {}),
     policyVersion: requiredString(identityRecord, "policyVersion", "identity"),
     allowedRepositories: requiredStringArray(
       identityRecord,
@@ -319,6 +322,21 @@ function optionalString(
   }
   if (typeof value !== "string" || value.length === 0) {
     throw new RunnerConfigError(`${key} must be a non-empty string`);
+  }
+  return value;
+}
+
+function parseProtocolVersion(
+  record: Record<string, unknown>,
+): typeof RUNNER_CONTROL_PLANE_SCHEMA_VERSION | undefined {
+  const value = optionalString(record, "protocolVersion");
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value !== RUNNER_CONTROL_PLANE_SCHEMA_VERSION) {
+    throw new RunnerConfigError(
+      `identity.protocolVersion must be ${RUNNER_CONTROL_PLANE_SCHEMA_VERSION}`,
+    );
   }
   return value;
 }

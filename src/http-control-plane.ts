@@ -8,6 +8,7 @@ import type {
   RunnerRegistrationClient,
   RunnerRegistrationResult,
 } from "./assignment-runner.js";
+import { RUNNER_CONTROL_PLANE_SCHEMA_VERSION } from "./assignment-runner.js";
 
 export type RunnerFetch = (
   input: string | URL,
@@ -53,7 +54,7 @@ export class HttpRunnerControlPlaneClient
         ...this.#headers,
         "content-type": "application/json",
       },
-      body: JSON.stringify(identity),
+      body: JSON.stringify(runnerRegistrationPayload(identity)),
     });
     if (!isRecord(body) || !isRecord(body.runner)) {
       throw new HttpRunnerControlPlaneClientError(
@@ -178,4 +179,13 @@ function httpHeaders(
     }
   }
   return { ...result, authorization: `Bearer ${runnerToken}` };
+}
+
+function runnerRegistrationPayload(identity: RunnerIdentity): RunnerIdentity & {
+  protocolVersion: typeof RUNNER_CONTROL_PLANE_SCHEMA_VERSION;
+} {
+  return {
+    ...identity,
+    protocolVersion: identity.protocolVersion ?? RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
+  };
 }

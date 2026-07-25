@@ -1,13 +1,14 @@
-import type {
-  RunnerAssignmentEvent,
-  RunnerControlPlaneClient,
-  RunnerEventReportResult,
-  RunnerIdentity,
-  RunnerInboundEvent,
-  RunnerOutboundEvent,
-  RunnerRegistration,
-  RunnerRegistrationClient,
-  RunnerRegistrationResult,
+import {
+  RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
+  type RunnerAssignmentEvent,
+  type RunnerControlPlaneClient,
+  type RunnerEventReportResult,
+  type RunnerIdentity,
+  type RunnerInboundEvent,
+  type RunnerOutboundEvent,
+  type RunnerRegistration,
+  type RunnerRegistrationClient,
+  type RunnerRegistrationResult,
 } from "./assignment-runner.js";
 
 export class MemoryRunnerControlPlaneClient
@@ -46,6 +47,8 @@ export class MemoryRunnerControlPlaneClient
       policy: {
         tenantId: identity.tenantId,
         runnerId: identity.runnerId,
+        protocolVersion:
+          identity.protocolVersion ?? RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
         policyVersion: identity.policyVersion,
         allowedRepositories: [...identity.allowedRepositories],
       },

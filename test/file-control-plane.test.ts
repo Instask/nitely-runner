@@ -38,6 +38,7 @@ describe("FileRunnerControlPlaneClient", () => {
         policy: {
           tenantId: "tenant-1",
           runnerId: "runner-1",
+          protocolVersion: RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
           policyVersion: "policy-1",
           allowedRepositories: ["repo-1"],
         },

@@ -272,6 +272,16 @@ describe("runner config", () => {
     );
   });
 
+  it("rejects unsupported identity protocol versions", () => {
+    expect(() =>
+      parseRunnerConfig({
+        identity: { ...identity, protocolVersion: "runner-control-plane.v0" },
+        controlPlane: { type: "http", baseUrl: "https://control.example/api" },
+        repositoryPaths: { "repo-1": "/repo" },
+      }),
+    ).toThrow("identity.protocolVersion must be runner-control-plane.v1");
+  });
+
   it("keeps the example HTTP config parseable", async () => {
     const config = await loadRunnerConfig(
       join(repoRoot, "examples", "http-runner.config.example.json"),
@@ -281,6 +291,7 @@ describe("runner config", () => {
       identity: {
         tenantId: "tenant-1",
         runnerId: "runner-1",
+        protocolVersion: "runner-control-plane.v1",
       },
       controlPlane: {
         type: "http",

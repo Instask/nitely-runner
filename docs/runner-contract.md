@@ -24,7 +24,9 @@ A runner identity should include:
 - `repositoryScopes`: explicit repositories or repository groups it can serve.
 - `capabilities`: supported OS, execution backend, agent runtimes, toolchains,
   network policy, and artifact limits.
-- `version`: runner protocol/runtime version.
+- `protocolVersion`: runner/control-plane protocol version, currently
+  `runner-control-plane.v1`.
+- `version`: runner runtime/package version.
 
 ## Run Assignment
 

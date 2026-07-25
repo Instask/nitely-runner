@@ -84,7 +84,10 @@ describe("HttpRunnerControlPlaneClient", () => {
         "content-type": "application/json",
       },
     });
-    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(identity);
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+      ...identity,
+      protocolVersion: RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
+    });
   });
 
   it("polls assignments with runner identity query parameters", async () => {

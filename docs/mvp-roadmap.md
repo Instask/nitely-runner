@@ -47,7 +47,8 @@
 - Stream heartbeat, status, logs metadata, artifact metadata, and terminal
   evidence.
 - Support cancellation.
-- Add version compatibility checks.
+- Add version compatibility checks. (Runner registration now reports the
+  `runner-control-plane.v1` protocol version.)
 
 ## M3: Hardened Runner
 

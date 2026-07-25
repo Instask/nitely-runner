@@ -18,6 +18,7 @@ export type RunnerRedactionStatus =
 export interface RunnerIdentity {
   tenantId: string;
   runnerId: string;
+  protocolVersion?: typeof RUNNER_CONTROL_PLANE_SCHEMA_VERSION;
   policyVersion: string;
   allowedRepositories: string[];
   version: string;
@@ -26,6 +27,7 @@ export interface RunnerIdentity {
 export interface RunnerPolicySnapshot {
   tenantId: string;
   runnerId: string;
+  protocolVersion?: typeof RUNNER_CONTROL_PLANE_SCHEMA_VERSION;
   policyVersion: string;
   allowedRepositories: string[];
   allowedUploadRedactionStatuses?: RunnerRedactionStatus[];
