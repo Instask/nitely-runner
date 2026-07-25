@@ -28,6 +28,10 @@
       "types": "./dist/file-control-plane.d.ts",
       "default": "./dist/file-control-plane.js"
     },
+    "./heartbeat": {
+      "types": "./dist/heartbeat.d.ts",
+      "default": "./dist/heartbeat.js"
+    },
     "./http-control-plane": {
       "types": "./dist/http-control-plane.d.ts",
       "default": "./dist/http-control-plane.js"

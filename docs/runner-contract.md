@@ -85,6 +85,11 @@ This keeps the runner independent from a specific transport while preserving
 the protocol shape required by HTTP polling, websocket, queue, or file-backed
 development stubs.
 
+`createRunnerHeartbeatEvent` and `reportRunnerHeartbeat` produce and send
+metadata-only `runner.heartbeat` events through the same client interface. The
+heartbeat payload includes status, active run ids, runner version, and optional
+capacity metadata, never raw logs, prompts, source, or local environment dumps.
+
 `MemoryRunnerControlPlaneClient` is the initial local rehearsal client. It keeps
 pending assignments in memory, records reported runner events, deduplicates by
 event id, and removes assignments after `task.accepted` or `task.rejected`.
