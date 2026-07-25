@@ -8,6 +8,7 @@ import {
   type RunnerIdentity,
   type RunnerOutboundEvent,
 } from "../src/assignment-runner.js";
+import { LocalNitelyCliExecutor } from "../src/local-nitely-executor.js";
 import { MemoryRunnerControlPlaneClient } from "../src/memory-control-plane.js";
 
 const fixedNow = () => new Date("2026-07-25T01:02:03.000Z");
@@ -37,9 +38,16 @@ function assignment(
     payload: {
       taskId: input.taskId ?? "task-1",
       repoId: input.repoId ?? "repo-1",
+      repository: input.repository ?? {
+        repoId: input.repoId ?? "repo-1",
+        name: "Instask/example",
+        cloneUrl: "https://github.com/Instask/example.git",
+      },
+      sourceRevision: input.sourceRevision ?? "abc123",
       flowId: input.flowId ?? "flow-1",
+      flowPath: input.flowPath ?? "flows/flow-1.json",
       policyVersion: input.policyVersion ?? identity.policyVersion,
-      inputs: input.inputs ?? { issue: "275" },
+      inputs: input.inputs ?? { spec: "docs/spec.md" },
     },
   };
 }
@@ -119,6 +127,9 @@ describe("runOneAssignmentCycle", () => {
     ]);
     expect(result.reportedEvents.every((event) => event.redactionStatus === "metadata_only"))
       .toBe(true);
+    expect(result.reportedEvents[0]?.payload).toMatchObject({
+      sourceRevision: "abc123",
+    });
     expect(reports).toHaveLength(1);
   });
 
@@ -146,6 +157,46 @@ describe("runOneAssignmentCycle", () => {
       "run.started",
       "run.completed",
     ]);
+  });
+
+  it("rehearses one assignment through the local Nitely CLI executor", async () => {
+    const client = new MemoryRunnerControlPlaneClient([assignment()]);
+    const executor = new LocalNitelyCliExecutor({
+      command: "nitely",
+      repositoryPaths: { "repo-1": "/work/repo" },
+      runCommand: async () => ({
+        exitCode: 0,
+        stdout:
+          "RUN run-cli completed\nBranch: nitely/run-cli\nWorktree: /work/repo/.nitely/runs/run-cli/worktree\n",
+        stderr: "",
+      }),
+    });
+
+    const result = await runOneAssignmentCycle({
+      identity,
+      client,
+      executor,
+      now: fixedNow,
+      createId: (kind) => `cli-${kind}`,
+    });
+
+    expect(result.status).toBe("handled");
+    if (result.status !== "handled") {
+      throw new Error("expected handled result");
+    }
+    expect(result.projection).toMatchObject({
+      status: "succeeded",
+      runId: "run-cli",
+    });
+    expect(client.listEvents().map((event) => event.kind)).toEqual([
+      "task.accepted",
+      "run.preparing",
+      "run.started",
+      "run.completed",
+    ]);
+    expect(client.listEvents().at(-1)?.payload).toMatchObject({
+      runId: "run-cli",
+    });
   });
 
   it("rejects assignments outside repository scope without executing", async () => {

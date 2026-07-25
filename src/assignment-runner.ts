@@ -27,9 +27,19 @@ export interface RunnerAssignmentPayload {
   [key: string]: unknown;
   taskId: string;
   repoId: string;
+  repository?: RunnerRepositoryRef;
+  sourceRevision?: string;
   flowId: string;
+  flowPath?: string;
   policyVersion: string;
   inputs?: Record<string, unknown>;
+}
+
+export interface RunnerRepositoryRef {
+  repoId: string;
+  name?: string;
+  cloneUrl?: string;
+  defaultBranch?: string;
 }
 
 export type RunnerOutboundEventKind =
@@ -188,6 +198,9 @@ export async function runOneAssignmentCycle(
     payload: {
       taskId: assignment.taskId,
       repoId: assignment.repoId,
+      ...(assignment.sourceRevision
+        ? { sourceRevision: assignment.sourceRevision }
+        : {}),
       flowId: assignment.flowId,
       policyVersion: input.identity.policyVersion,
     },
@@ -205,6 +218,9 @@ export async function runOneAssignmentCycle(
     payload: {
       taskId: assignment.taskId,
       repoId: assignment.repoId,
+      ...(assignment.sourceRevision
+        ? { sourceRevision: assignment.sourceRevision }
+        : {}),
       flowId: assignment.flowId,
     },
   });
@@ -280,7 +296,16 @@ function parseAssignmentEvent(
   return {
     taskId: payload.taskId,
     repoId: payload.repoId,
+    ...(isRecord(payload.repository)
+      ? { repository: parseRepositoryRef(payload.repository, payload.repoId) }
+      : {}),
+    ...(typeof payload.sourceRevision === "string" && payload.sourceRevision
+      ? { sourceRevision: payload.sourceRevision }
+      : {}),
     flowId: payload.flowId,
+    ...(typeof payload.flowPath === "string" && payload.flowPath
+      ? { flowPath: payload.flowPath }
+      : {}),
     policyVersion: payload.policyVersion,
     ...(payload.inputs && isRecord(payload.inputs)
       ? { inputs: payload.inputs }
@@ -330,6 +355,9 @@ function createStartedEvent(input: {
       runId: input.execution.runId,
       taskId: input.assignment.taskId,
       repoId: input.assignment.repoId,
+      ...(input.assignment.sourceRevision
+        ? { sourceRevision: input.assignment.sourceRevision }
+        : {}),
       flowId: input.assignment.flowId,
     },
   });
@@ -440,6 +468,24 @@ function createRunnerEvent(input: {
     payload: input.payload,
     redactionStatus: input.redactionStatus ?? "metadata_only",
     policyVersion: input.identity.policyVersion,
+  };
+}
+
+function parseRepositoryRef(
+  value: Record<string, unknown>,
+  repoId: string,
+): RunnerRepositoryRef {
+  const resolvedRepoId =
+    typeof value.repoId === "string" && value.repoId ? value.repoId : repoId;
+  return {
+    repoId: resolvedRepoId,
+    ...(typeof value.name === "string" && value.name ? { name: value.name } : {}),
+    ...(typeof value.cloneUrl === "string" && value.cloneUrl
+      ? { cloneUrl: value.cloneUrl }
+      : {}),
+    ...(typeof value.defaultBranch === "string" && value.defaultBranch
+      ? { defaultBranch: value.defaultBranch }
+      : {}),
   };
 }
 

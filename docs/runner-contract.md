@@ -89,6 +89,19 @@ development stubs.
 pending assignments in memory, records reported runner events, deduplicates by
 event id, and removes assignments after `task.accepted` or `task.rejected`.
 
+`LocalNitelyCliExecutor` is the initial OSS runtime bridge. It invokes
+`nitely run <flow> --repo <path> --input <name>=<path>` after resolving:
+
+- repository path from runner-local `repoId -> path` configuration, not from
+  assignment-controlled fields;
+- flow path from `assignment.flowPath`, runner-local `flowId -> path`
+  configuration, or `flowId` itself;
+- local-file inputs from string values or `{ path | uri }` objects.
+
+Structured remote inputs are intentionally rejected until a connector-specific
+materialization step exists. The executor reports only safe metadata: run id,
+change request URL, flow id/path, and source revision.
+
 Raw command logs and artifact bytes should be uploaded only when policy allows
 it. Metadata-first streaming is the default.
 
