@@ -12,6 +12,7 @@
   repository mapping, flow path, source revision, and local-file input metadata.
 - Add a file-backed control-plane client and config loader for deterministic
   local runner loops.
+- Add an HTTP control-plane client for the first runner-facing API skeleton.
 - Consume the public `nitely/runner-control-plane/*` contract once the OSS
   package is published or available as a workspace dependency.
 - Decide whether the first transport is polling, websocket, or queue-backed.

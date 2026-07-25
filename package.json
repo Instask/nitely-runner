@@ -28,6 +28,10 @@
       "types": "./dist/file-control-plane.d.ts",
       "default": "./dist/file-control-plane.js"
     },
+    "./http-control-plane": {
+      "types": "./dist/http-control-plane.d.ts",
+      "default": "./dist/http-control-plane.js"
+    },
     "./local-nitely-executor": {
       "types": "./dist/local-nitely-executor.d.ts",
       "default": "./dist/local-nitely-executor.js"

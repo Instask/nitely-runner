@@ -95,6 +95,15 @@ events, applies assignment status projection, deduplicates replayed event ids,
 and rejects metadata-only events that contain raw logs, prompts, source, or
 secret-like payload fields.
 
+`HttpRunnerControlPlaneClient` uses the same runner client interface against
+the first control-plane HTTP skeleton:
+
+- `GET /runner/assignments?tenantId=...&runnerId=...`
+- `POST /runner/events`
+
+It keeps transport details outside the executor and preserves the poll/report
+shape used by memory and file-backed rehearsal.
+
 `LocalNitelyCliExecutor` is the initial OSS runtime bridge. It invokes
 `nitely run <flow> --repo <path> --input <name>=<path>` after resolving:
 
