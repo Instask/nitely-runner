@@ -56,6 +56,32 @@
       "default": "./dist/runner-config.js"
     }
   },
+  "files": [
+    "dist/assignment-runner.js",
+    "dist/assignment-runner.d.ts",
+    "dist/cli.js",
+    "dist/cli.d.ts",
+    "dist/file-control-plane.js",
+    "dist/file-control-plane.d.ts",
+    "dist/heartbeat.js",
+    "dist/heartbeat.d.ts",
+    "dist/http-control-plane.js",
+    "dist/http-control-plane.d.ts",
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/lifecycle.js",
+    "dist/lifecycle.d.ts",
+    "dist/local-nitely-executor.js",
+    "dist/local-nitely-executor.d.ts",
+    "dist/local-state.js",
+    "dist/local-state.d.ts",
+    "dist/memory-control-plane.js",
+    "dist/memory-control-plane.d.ts",
+    "dist/runner-config.js",
+    "dist/runner-config.d.ts",
+    "docs/",
+    "examples/"
+  ],
   "engines": {
     "node": ">=24"
   },
@@ -63,6 +89,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepack": "npm run clean && npm run build",
     "test": "vitest",
     "test:run": "vitest run"
   },
