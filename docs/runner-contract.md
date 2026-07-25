@@ -156,6 +156,13 @@ current schema, tenant id, runner id, policy version, valid protocol ids, and a
 parseable timestamp. Malformed or stale-policy instructions are ignored rather
 than aborting the active run.
 
+When `runnerStatePath` is present in config, the runner persists the
+runner-local assignment projection after each lifecycle transition. The state
+file records the task id, status, run id, sequence, applied event ids, and
+metadata-only lifecycle history needed for restart recovery and local
+troubleshooting. It is not a transport log and does not replace
+`reportEvents(events)` as the control-plane coordination boundary.
+
 Executors may return `evidenceArtifacts` when they have artifact metadata that
 is safe to share. The runner reports those entries as a metadata-only
 `evidence.reported` event before terminal completion, while keeping raw logs,
@@ -163,11 +170,12 @@ prompts, diffs, source, and artifact bytes out of the default upload boundary.
 
 `loadRunnerConfig` normalizes local runner configuration from JSON. It supports
 file-backed control-plane state and HTTP control-plane endpoints. Relative
-file-backed state paths and repository paths resolve from the config file
-directory; flow paths stay repo-relative so `nitely run` resolves them inside
-the target checkout. `runConfiguredRunnerOnce` and the `run-once` CLI send a
-heartbeat before and after the assignment cycle. `registerConfiguredRunner` and
-the `register` CLI register the same identity before polling for work.
+file-backed state paths, repository paths, and `runnerStatePath` resolve from
+the config file directory; flow paths stay repo-relative so `nitely run`
+resolves them inside the target checkout. `runConfiguredRunnerOnce` and the
+`run-once` CLI send a heartbeat before and after the assignment cycle.
+`registerConfiguredRunner` and the `register` CLI register the same identity
+before polling for work.
 `runConfiguredRunnerLoop` and `run-loop` reuse the same one-cycle behavior in a
 bounded or long-running poll loop. Library callers can choose fail-fast or
 continue-on-error behavior; the CLI loop continues after transient per-cycle

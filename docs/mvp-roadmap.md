@@ -38,7 +38,8 @@
 - Abort the active local Nitely CLI subprocess when a matching cancellation
   request is observed.
 - Execute an OSS Flow locally through `nitely run`.
-- Persist local run state and emit lifecycle events.
+- Persist local run state and emit lifecycle events. (`runnerStatePath` now
+  records local assignment projections after each lifecycle transition.)
 
 ## M2: Customer-Hosted Preview
 

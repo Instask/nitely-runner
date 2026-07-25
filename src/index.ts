@@ -5,5 +5,6 @@ export * from "./heartbeat.js";
 export * from "./http-control-plane.js";
 export * from "./lifecycle.js";
 export * from "./local-nitely-executor.js";
+export * from "./local-state.js";
 export * from "./memory-control-plane.js";
 export * from "./runner-config.js";

@@ -11,6 +11,7 @@ import {
 } from "../src/assignment-runner.js";
 import { LocalNitelyCliExecutor } from "../src/local-nitely-executor.js";
 import { MemoryRunnerControlPlaneClient } from "../src/memory-control-plane.js";
+import type { RunnerAssignmentProjection } from "../src/lifecycle.js";
 
 const fixedNow = () => new Date("2026-07-25T01:02:03.000Z");
 
@@ -70,6 +71,27 @@ function fakeClient(assignments: RunnerAssignmentEvent[]): {
           duplicateEventIds: [],
           rejectedEvents: [],
         };
+      },
+    },
+  };
+}
+
+function captureStateStore(): {
+  saved: RunnerAssignmentProjection[];
+  stateStore: {
+    saveAssignmentProjection: (
+      projection: RunnerAssignmentProjection,
+    ) => Promise<void>;
+  };
+} {
+  const saved: RunnerAssignmentProjection[] = [];
+  return {
+    saved,
+    stateStore: {
+      saveAssignmentProjection: async (projection) => {
+        saved.push(
+          JSON.parse(JSON.stringify(projection)) as RunnerAssignmentProjection,
+        );
       },
     },
   };
@@ -162,6 +184,126 @@ describe("runOneAssignmentCycle", () => {
       },
     });
     expect(reports).toHaveLength(2);
+  });
+
+  it("persists local assignment state for completed, failed, cancelled, and rejected cycles", async () => {
+    const successfulClient = new MemoryRunnerControlPlaneClient([assignment()]);
+    const successfulState = captureStateStore();
+
+    await runOneAssignmentCycle({
+      identity,
+      client: successfulClient,
+      now: fixedNow,
+      createId: (kind) => `persist-success-${kind}`,
+      stateStore: successfulState.stateStore,
+      executor: {
+        execute: async () => ({
+          status: "succeeded",
+          runId: "run-persist-success",
+        }),
+      },
+    });
+
+    expect(successfulState.saved.map((state) => state.status)).toEqual([
+      "assigned",
+      "accepted",
+      "preparing",
+      "running",
+      "succeeded",
+    ]);
+    expect(successfulState.saved.at(-1)).toMatchObject({
+      runId: "run-persist-success",
+      lastSequence: 4,
+    });
+
+    const failedState = captureStateStore();
+    await runOneAssignmentCycle({
+      identity,
+      client: new MemoryRunnerControlPlaneClient([
+        assignment({ taskId: "task-fail" }),
+      ]),
+      now: fixedNow,
+      createId: (kind) => `persist-failed-${kind}`,
+      stateStore: failedState.stateStore,
+      executor: {
+        execute: async () => {
+          throw new Error("executor failed safely");
+        },
+      },
+    });
+
+    expect(failedState.saved.map((state) => state.status)).toEqual([
+      "assigned",
+      "accepted",
+      "preparing",
+      "failed",
+    ]);
+
+    const rejectedState = captureStateStore();
+    await runOneAssignmentCycle({
+      identity,
+      client: new MemoryRunnerControlPlaneClient([
+        assignment({ taskId: "task-reject", policyVersion: "policy-stale" }),
+      ]),
+      now: fixedNow,
+      createId: (kind) => `persist-rejected-${kind}`,
+      stateStore: rejectedState.stateStore,
+      executor: {
+        execute: async () => {
+          throw new Error("executor should not run");
+        },
+      },
+    });
+
+    expect(rejectedState.saved.map((state) => state.status)).toEqual([
+      "assigned",
+      "rejected",
+    ]);
+
+    const cancelledClient = new MemoryRunnerControlPlaneClient([
+      assignment({ taskId: "task-cancel" }),
+    ]);
+    const cancelledState = captureStateStore();
+    await runOneAssignmentCycle({
+      identity,
+      client: cancelledClient,
+      now: fixedNow,
+      createId: (kind) => `persist-cancelled-${kind}`,
+      cancellationPollIntervalMs: 1,
+      sleep: async () => {},
+      stateStore: cancelledState.stateStore,
+      executor: {
+        execute: async ({ signal, onRunStarted }) => {
+          await onRunStarted?.("run-persist-cancel");
+          cancelledClient.enqueueControlPlaneEvent(
+            cancellationRequest({
+              sequence: 4,
+              runId: "run-persist-cancel",
+              taskId: "task-cancel",
+            }),
+          );
+          await waitForAbort(signal);
+          return {
+            status: "cancelled",
+            runId: "run-persist-cancel",
+            safeMessage: "cancelled after operator request",
+          };
+        },
+      },
+    });
+
+    expect(cancelledState.saved.map((state) => state.status)).toEqual([
+      "assigned",
+      "accepted",
+      "preparing",
+      "running",
+      "cancelling",
+      "cancelled",
+    ]);
+    expect(cancelledState.saved.at(-1)).toMatchObject({
+      runId: "run-persist-cancel",
+      lastSequence: 5,
+    });
   });
 
   it("runs against the reusable in-memory control-plane client", async () => {
@@ -682,19 +824,21 @@ describe("runOneAssignmentCycle", () => {
 function cancellationRequest(input: {
   runId: string;
   sequence: number;
+  taskId?: string;
 }): RunnerInboundEvent {
+  const taskId = input.taskId ?? "task-1";
   return {
     eventId: "cancel-request-1",
     schemaVersion: RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
     tenantId: identity.tenantId,
     runnerId: identity.runnerId,
-    taskId: "task-1",
+    taskId,
     runId: input.runId,
     sequence: input.sequence,
     createdAt: "2026-07-25T01:02:04.000Z",
     kind: "task.cancel_requested",
     payload: {
-      taskId: "task-1",
+      taskId,
       runId: input.runId,
       reason: "operator_requested",
       safeMessage: "cancelled after operator request",

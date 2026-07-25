@@ -16,6 +16,7 @@ import {
   HttpRunnerControlPlaneClient,
   type RunnerFetch,
 } from "./http-control-plane.js";
+import { FileRunnerAssignmentStateStore } from "./local-state.js";
 import {
   LocalNitelyCliExecutor,
   type NitelyCommandRunner,
@@ -41,6 +42,7 @@ export interface RunnerConfig {
   identity: RunnerIdentity;
   controlPlane: ControlPlaneConfig;
   nitelyCommand?: string;
+  runnerStatePath?: string;
   repositoryPaths: Record<string, string>;
   flowPaths: Record<string, string>;
   env?: NodeJS.ProcessEnv;
@@ -95,6 +97,7 @@ export interface ConfiguredRunnerComponents {
   identity: RunnerIdentity;
   client: FileRunnerControlPlaneClient | HttpRunnerControlPlaneClient;
   executor: LocalNitelyCliExecutor;
+  stateStore?: FileRunnerAssignmentStateStore;
 }
 
 export class RunnerConfigError extends Error {
@@ -117,6 +120,7 @@ export function parseRunnerConfig(
   const identityRecord = requireRecord(root.identity, "identity");
   const controlPlaneRecord = requireRecord(root.controlPlane, "controlPlane");
   const nitelyCommand = optionalString(root, "nitelyCommand");
+  const runnerStatePath = optionalString(root, "runnerStatePath");
   const protocolVersion = parseProtocolVersion(identityRecord);
 
   const identity: RunnerIdentity = {
@@ -174,6 +178,9 @@ export function parseRunnerConfig(
             ...(httpHeaders !== undefined ? { headers: httpHeaders } : {}),
           },
     ...(nitelyCommand !== undefined ? { nitelyCommand } : {}),
+    ...(runnerStatePath !== undefined
+      ? { runnerStatePath: resolvePath(baseDir, runnerStatePath) }
+      : {}),
     repositoryPaths: parsePathMap(root.repositoryPaths, "repositoryPaths", baseDir),
     flowPaths: parseStringMap(root.flowPaths, "flowPaths", false),
     ...(root.env !== undefined ? { env: parseStringMap(root.env, "env", false) } : {}),
@@ -204,7 +211,17 @@ export function createConfiguredRunnerComponents(
     env: input.config.env,
     runCommand: input.runCommand,
   });
-  return { identity: input.config.identity, client, executor };
+  const stateStore = input.config.runnerStatePath
+    ? new FileRunnerAssignmentStateStore({
+        path: input.config.runnerStatePath,
+      })
+    : undefined;
+  return {
+    identity: input.config.identity,
+    client,
+    executor,
+    ...(stateStore ? { stateStore } : {}),
+  };
 }
 
 export async function runConfiguredAssignmentCycle(
@@ -217,6 +234,7 @@ export async function runConfiguredAssignmentCycle(
     executor: components.executor,
     now: input.now,
     createId: input.createId,
+    stateStore: components.stateStore,
   });
 }
 
@@ -247,6 +265,7 @@ export async function runConfiguredRunnerOnce(
     executor: components.executor,
     now: input.now,
     createId: input.createId,
+    stateStore: components.stateStore,
   });
   heartbeatReports.push(
     await reportRunnerHeartbeat({

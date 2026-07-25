@@ -40,6 +40,10 @@
       "types": "./dist/local-nitely-executor.d.ts",
       "default": "./dist/local-nitely-executor.js"
     },
+    "./local-state": {
+      "types": "./dist/local-state.d.ts",
+      "default": "./dist/local-state.js"
+    },
     "./memory-control-plane": {
       "types": "./dist/memory-control-plane.d.ts",
       "default": "./dist/memory-control-plane.js"

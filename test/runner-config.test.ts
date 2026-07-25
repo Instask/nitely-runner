@@ -19,6 +19,7 @@ import {
   runConfiguredRunnerOnce,
 } from "../src/runner-config.js";
 import type { RunnerFetch } from "../src/http-control-plane.js";
+import { readFileRunnerLocalState } from "../src/local-state.js";
 import type { NitelyCommandInvocation } from "../src/local-nitely-executor.js";
 
 const fixedNow = () => new Date("2026-07-25T01:02:03.000Z");
@@ -37,6 +38,7 @@ describe("runner config", () => {
     const dir = await mkdtemp(join(tmpdir(), "nitely-runner-config-"));
     const repoPath = join(dir, "repo");
     const statePath = join(dir, "state", "control-plane.json");
+    const runnerStatePath = join(dir, "state", "runner-state.json");
     const configPath = join(dir, "runner.json");
     await mkdir(repoPath, { recursive: true });
     await mkdir(join(dir, "state"), { recursive: true });
@@ -47,6 +49,7 @@ describe("runner config", () => {
         {
           identity,
           controlPlane: { type: "file", path: "state/control-plane.json" },
+          runnerStatePath: "state/runner-state.json",
           nitelyCommand: "nitely",
           repositoryPaths: { "repo-1": "repo" },
           flowPaths: { "flow-1": "flows/implement.json" },
@@ -109,6 +112,13 @@ describe("runner config", () => {
       "run.started",
       "run.completed",
     ]);
+    const runnerState = await readFileRunnerLocalState(runnerStatePath);
+    expect(runnerState.assignments["task-1"]).toMatchObject({
+      taskId: "task-1",
+      status: "succeeded",
+      runId: "run-configured",
+      lastSequence: 4,
+    });
   });
 
   it("runs one HTTP-backed assignment cycle from config", async () => {

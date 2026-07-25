@@ -13,6 +13,7 @@
     "runnerToken": "runner-dev-token"
   },
   "nitelyCommand": "nitely",
+  "runnerStatePath": ".nitely/runner-state.json",
   "repositoryPaths": {
     "repo-1": "/absolute/path/to/customer/repo"
   },
