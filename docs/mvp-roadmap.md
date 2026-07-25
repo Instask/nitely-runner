@@ -5,6 +5,9 @@
 - Define runner identity, run assignment, lifecycle, cancellation, and event
   envelopes.
 - Implement lifecycle projection tests locally before adding transport.
+- Implement a single-assignment poll/execute/report rehearsal with an injected
+  executor and mock control-plane client.
+- Provide an in-memory control-plane client for deterministic local rehearsal.
 - Consume the public `nitely/runner-control-plane/*` contract once the OSS
   package is published or available as a workspace dependency.
 - Decide whether the first transport is polling, websocket, or queue-backed.
@@ -16,6 +19,8 @@
 - Load a local config file.
 - Register against a mock control plane.
 - Accept one assignment.
+- Report accepted, preparing, started, blocked, completed, failed, cancelled,
+  and rejected events through the protocol client.
 - Execute an OSS Flow locally.
 - Persist local run state and emit lifecycle events.
 

@@ -30,8 +30,10 @@ supervision needed to coordinate with a control plane.
 
 ## Current Status
 
-Protocol and MVP planning, with the first local lifecycle projection helper in
-place. Start with contract code and file/local mocks before daemon transport.
+Protocol and MVP planning, with the first local lifecycle projection helper,
+single-assignment poll/execute/report rehearsal, and in-memory control-plane
+client in place. Start with contract code and file/local mocks before daemon
+transport.
 
 - [docs/runner-contract.md](docs/runner-contract.md)
 - [docs/mvp-roadmap.md](docs/mvp-roadmap.md)

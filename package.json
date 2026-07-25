@@ -12,6 +12,14 @@
     "./lifecycle": {
       "types": "./dist/lifecycle.d.ts",
       "default": "./dist/lifecycle.js"
+    },
+    "./assignment-runner": {
+      "types": "./dist/assignment-runner.d.ts",
+      "default": "./dist/assignment-runner.js"
+    },
+    "./memory-control-plane": {
+      "types": "./dist/memory-control-plane.d.ts",
+      "default": "./dist/memory-control-plane.js"
     }
   },
   "engines": {

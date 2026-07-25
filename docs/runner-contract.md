@@ -75,6 +75,20 @@ The public protocol starts in `nitely-oss` as
 `nitely/runner-control-plane/file-stub`. This repository owns the runner daemon
 and local lifecycle behavior that consumes that contract.
 
+The first executable runner layer uses an abstract client with two operations:
+
+- `pollAssignments(identity)`: return ordered `task.assigned` protocol events.
+- `reportEvents(events)`: append runner-to-control-plane events and return
+  accepted, duplicate, and rejected event ids.
+
+This keeps the runner independent from a specific transport while preserving
+the protocol shape required by HTTP polling, websocket, queue, or file-backed
+development stubs.
+
+`MemoryRunnerControlPlaneClient` is the initial local rehearsal client. It keeps
+pending assignments in memory, records reported runner events, deduplicates by
+event id, and removes assignments after `task.accepted` or `task.rejected`.
+
 Raw command logs and artifact bytes should be uploaded only when policy allows
 it. Metadata-first streaming is the default.
 
