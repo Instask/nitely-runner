@@ -1,0 +1,341 @@
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+import {
+  RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
+  type RunnerAssignmentEvent,
+  type RunnerIdentity,
+} from "../src/assignment-runner.js";
+import { runRunnerCli } from "../src/cli.js";
+import {
+  readFileRunnerControlPlaneState,
+  writeFileRunnerControlPlaneState,
+  type FileRunnerControlPlaneState,
+} from "../src/file-control-plane.js";
+import type { RunnerFetch } from "../src/http-control-plane.js";
+import type { NitelyCommandInvocation } from "../src/local-nitely-executor.js";
+
+const fixedNow = () => new Date("2026-07-25T01:02:03.000Z");
+
+const identity: RunnerIdentity = {
+  tenantId: "tenant-1",
+  runnerId: "runner-1",
+  policyVersion: "policy-1",
+  allowedRepositories: ["repo-1"],
+  version: "0.1.0",
+};
+
+describe("runner CLI", () => {
+  it("registers a configured runner identity", async () => {
+    const { configPath, statePath } = await registrationFixture();
+    const stdout = textWriter();
+    const stderr = textWriter();
+
+    const code = await runRunnerCli(["register", "--config", configPath], {
+      stdout,
+      stderr,
+    });
+
+    expect(code).toBe(0);
+    expect(stdout.text).toContain(
+      "runner registered tenant=tenant-1 runner=runner-1 policy=policy-1",
+    );
+    expect(stderr.text).toBe("");
+    await expect(readFileRunnerControlPlaneState(statePath)).resolves.toMatchObject({
+      runners: {
+        "tenant-1:runner-1": {
+          status: "registered",
+          version: "0.1.0",
+        },
+      },
+    });
+  });
+
+  it("runs one configured assignment cycle", async () => {
+    const { configPath, repoPath, statePath } = await fixture();
+    const stdout = textWriter();
+    const stderr = textWriter();
+    const calls: NitelyCommandInvocation[] = [];
+
+    const code = await runRunnerCli(["run-once", "--config", configPath], {
+      stdout,
+      stderr,
+      now: fixedNow,
+      createId: (kind) => `cli-${kind}`,
+      runCommand: async (invocation) => {
+        calls.push(invocation);
+        return { exitCode: 0, stdout: "RUN run-cli completed\n", stderr: "" };
+      },
+    });
+
+    expect(code).toBe(0);
+    expect(stdout.text).toContain(
+      "runner cycle handled task=task-1 status=succeeded events=4 rejected=0",
+    );
+    expect(stdout.text).toContain("runner cycle run=run-cli");
+    expect(stderr.text).toBe("");
+    expect(calls[0]).toMatchObject({
+      cwd: repoPath,
+      args: ["run", "flows/implement.json", "--repo", repoPath],
+    });
+    const state = await readFileRunnerControlPlaneState(statePath);
+    expect(state.runnerEvents.map((event) => event.kind)).toEqual([
+      "runner.heartbeat",
+      "task.accepted",
+      "run.preparing",
+      "run.started",
+      "run.completed",
+      "runner.heartbeat",
+    ]);
+  });
+
+  it("runs a bounded configured runner loop", async () => {
+    const { configPath } = await fixture();
+    const stdout = textWriter();
+    const stderr = textWriter();
+    const calls: NitelyCommandInvocation[] = [];
+
+    const code = await runRunnerCli(
+      [
+        "run-loop",
+        "--config",
+        configPath,
+        "--max-cycles",
+        "2",
+        "--poll-interval-ms",
+        "1",
+      ],
+      {
+        stdout,
+        stderr,
+        now: fixedNow,
+        sleep: async () => {},
+        createId: (kind) => `cli-loop-${kind}`,
+        runCommand: async (invocation) => {
+          calls.push(invocation);
+          return { exitCode: 0, stdout: "RUN run-cli-loop completed\n", stderr: "" };
+        },
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(stdout.text).toContain("runner loop cycle=1");
+    expect(stdout.text).toContain(
+      "runner cycle handled task=task-1 status=succeeded events=4 rejected=0",
+    );
+    expect(stdout.text).toContain("runner loop cycle=2");
+    expect(stdout.text).toContain("runner cycle idle");
+    expect(stdout.text).toContain("runner loop stopped cycles=2");
+    expect(stderr.text).toBe("");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("keeps run-loop alive after a transient cycle failure", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nitely-runner-cli-loop-http-"));
+    const repoPath = join(dir, "repo");
+    const configPath = join(dir, "runner.json");
+    await mkdir(repoPath, { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          identity,
+          controlPlane: {
+            type: "http",
+            baseUrl: "https://control.example/api",
+          },
+          repositoryPaths: { "repo-1": repoPath },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    const stdout = textWriter();
+    const stderr = textWriter();
+    let fetchCount = 0;
+    const fetch: RunnerFetch = async () => {
+      fetchCount += 1;
+      if (fetchCount === 1) {
+        throw new Error("temporary control-plane outage");
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          assignments: [],
+          acceptedEventIds: [],
+          duplicateEventIds: [],
+          rejectedEvents: [],
+        }),
+      };
+    };
+
+    const code = await runRunnerCli(
+      [
+        "run-loop",
+        "--config",
+        configPath,
+        "--max-cycles",
+        "2",
+        "--poll-interval-ms",
+        "1",
+      ],
+      {
+        stdout,
+        stderr,
+        fetch,
+        sleep: async () => {},
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(stdout.text).toContain("runner loop cycle=1");
+    expect(stdout.text).toContain("runner loop cycle=2");
+    expect(stdout.text).toContain("runner cycle idle");
+    expect(stdout.text).toContain("runner loop stopped cycles=2");
+    expect(stderr.text).toContain(
+      "runner loop cycle=1 failed: temporary control-plane outage",
+    );
+  });
+
+  it("returns usage errors without running a cycle", async () => {
+    const stdout = textWriter();
+    const stderr = textWriter();
+
+    const code = await runRunnerCli(["run-once"], { stdout, stderr });
+
+    expect(code).toBe(2);
+    expect(stdout.text).toBe("");
+    expect(stderr.text).toContain("missing required --config <path>");
+  });
+});
+
+async function registrationFixture(): Promise<{
+  configPath: string;
+  statePath: string;
+}> {
+  const dir = await mkdtemp(join(tmpdir(), "nitely-runner-cli-register-"));
+  const statePath = join(dir, "state", "control-plane.json");
+  const configPath = join(dir, "runner.json");
+  await writeFile(
+    configPath,
+    JSON.stringify(
+      {
+        identity,
+        controlPlane: { type: "file", path: "state/control-plane.json" },
+        repositoryPaths: { "repo-1": "repo" },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  return { configPath, statePath };
+}
+
+async function fixture(): Promise<{
+  configPath: string;
+  repoPath: string;
+  statePath: string;
+}> {
+  const dir = await mkdtemp(join(tmpdir(), "nitely-runner-cli-"));
+  const repoPath = join(dir, "repo");
+  const statePath = join(dir, "state", "control-plane.json");
+  const configPath = join(dir, "runner.json");
+  await mkdir(repoPath, { recursive: true });
+  await writeFileRunnerControlPlaneState(statePath, fileState());
+  await writeFile(
+    configPath,
+    JSON.stringify(
+      {
+        identity,
+        controlPlane: { type: "file", path: "state/control-plane.json" },
+        repositoryPaths: { "repo-1": "repo" },
+        flowPaths: { "flow-1": "flows/implement.json" },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  return { configPath, repoPath, statePath };
+}
+
+function fileState(): FileRunnerControlPlaneState {
+  const assignedEvent = assignmentEvent();
+  return {
+    version: 1,
+    runners: {
+      "tenant-1:runner-1": {
+        tenantId: identity.tenantId,
+        runnerId: identity.runnerId,
+        policy: {
+          tenantId: identity.tenantId,
+          runnerId: identity.runnerId,
+          policyVersion: identity.policyVersion,
+          allowedRepositories: identity.allowedRepositories,
+        },
+        activeRunIds: [],
+        createdAt: "2026-07-25T01:00:00.000Z",
+        updatedAt: "2026-07-25T01:00:00.000Z",
+      },
+    },
+    assignments: {
+      "tenant-1:task-1": {
+        tenantId: identity.tenantId,
+        runnerId: identity.runnerId,
+        taskId: "task-1",
+        repoId: "repo-1",
+        sourceRevision: "abc123",
+        flowId: "flow-1",
+        flowPath: "flows/implement.json",
+        inputs: {},
+        policyVersion: identity.policyVersion,
+        status: "assigned",
+        assignedEvent,
+        createdAt: assignedEvent.createdAt,
+        updatedAt: assignedEvent.createdAt,
+      },
+    },
+    controlPlaneEvents: [],
+    runnerEvents: [],
+  };
+}
+
+function assignmentEvent(): RunnerAssignmentEvent {
+  return {
+    eventId: "assigned-1",
+    schemaVersion: RUNNER_CONTROL_PLANE_SCHEMA_VERSION,
+    tenantId: identity.tenantId,
+    runnerId: identity.runnerId,
+    taskId: "task-1",
+    sequence: 0,
+    createdAt: "2026-07-25T01:00:00.000Z",
+    kind: "task.assigned",
+    redactionStatus: "metadata_only",
+    policyVersion: identity.policyVersion,
+    payload: {
+      taskId: "task-1",
+      repoId: "repo-1",
+      sourceRevision: "abc123",
+      flowId: "flow-1",
+      flowPath: "flows/implement.json",
+      inputs: {},
+      policyVersion: identity.policyVersion,
+    },
+  };
+}
+
+function textWriter(): { text: string; write(chunk: string): void } {
+  return {
+    text: "",
+    write(chunk: string) {
+      this.text += chunk;
+    },
+  };
+}

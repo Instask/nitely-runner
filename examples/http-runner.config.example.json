@@ -1,0 +1,23 @@
+{
+  "identity": {
+    "tenantId": "tenant-1",
+    "runnerId": "runner-1",
+    "protocolVersion": "runner-control-plane.v1",
+    "policyVersion": "policy-1",
+    "allowedRepositories": ["repo-1"],
+    "version": "0.1.0"
+  },
+  "controlPlane": {
+    "type": "http",
+    "baseUrl": "http://127.0.0.1:8787",
+    "runnerToken": "runner-dev-token"
+  },
+  "nitelyCommand": "nitely",
+  "runnerStatePath": ".nitely/runner-state.json",
+  "repositoryPaths": {
+    "repo-1": "/absolute/path/to/customer/repo"
+  },
+  "flowPaths": {
+    "flow-1": "flows/implement.json"
+  }
+}
