@@ -15,6 +15,7 @@ import {
   loadRunnerConfig,
   parseRunnerConfig,
   runConfiguredAssignmentCycle,
+  runConfiguredRunnerOnce,
 } from "../src/runner-config.js";
 import type { RunnerFetch } from "../src/http-control-plane.js";
 import type { NitelyCommandInvocation } from "../src/local-nitely-executor.js";
@@ -149,6 +150,52 @@ describe("runner config", () => {
       headers: { authorization: "Bearer runner-token" },
     });
     expect(JSON.parse(String(fetchCalls[1]?.init?.body)).events).toHaveLength(4);
+  });
+
+  it("reports heartbeat around one HTTP-backed runner cycle", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nitely-runner-http-once-"));
+    const repoPath = join(dir, "repo");
+    await mkdir(repoPath, { recursive: true });
+    const fetchCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const config = parseRunnerConfig(
+      {
+        identity,
+        controlPlane: {
+          type: "http",
+          baseUrl: "https://control.example/api",
+        },
+        repositoryPaths: { "repo-1": repoPath },
+      },
+      dir,
+    );
+
+    const result = await runConfiguredRunnerOnce({
+      config,
+      now: fixedNow,
+      createId: (kind) => `http-once-${kind}`,
+      fetch: fakeFetch(fetchCalls),
+      runCommand: async () => ({
+        exitCode: 0,
+        stdout: "RUN run-http-once completed\n",
+        stderr: "",
+      }),
+    });
+
+    expect(result.cycle.status).toBe("handled");
+    expect(result.heartbeatReports).toHaveLength(2);
+    expect(fetchCalls.map((call) => call.url)).toEqual([
+      "https://control.example/api/runner/events",
+      "https://control.example/api/runner/assignments?tenantId=tenant-1&runnerId=runner-1",
+      "https://control.example/api/runner/events",
+      "https://control.example/api/runner/events",
+    ]);
+    expect(JSON.parse(String(fetchCalls[0]?.init?.body)).events).toMatchObject([
+      { kind: "runner.heartbeat", payload: { status: "idle" } },
+    ]);
+    expect(JSON.parse(String(fetchCalls[2]?.init?.body)).events).toHaveLength(4);
+    expect(JSON.parse(String(fetchCalls[3]?.init?.body)).events).toMatchObject([
+      { kind: "runner.heartbeat", payload: { status: "idle" } },
+    ]);
   });
 
   it("rejects unsupported control-plane types", () => {

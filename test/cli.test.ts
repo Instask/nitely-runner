@@ -11,6 +11,7 @@ import {
 } from "../src/assignment-runner.js";
 import { runRunnerCli } from "../src/cli.js";
 import {
+  readFileRunnerControlPlaneState,
   writeFileRunnerControlPlaneState,
   type FileRunnerControlPlaneState,
 } from "../src/file-control-plane.js";
@@ -28,7 +29,7 @@ const identity: RunnerIdentity = {
 
 describe("runner CLI", () => {
   it("runs one configured assignment cycle", async () => {
-    const { configPath, repoPath } = await fixture();
+    const { configPath, repoPath, statePath } = await fixture();
     const stdout = textWriter();
     const stderr = textWriter();
     const calls: NitelyCommandInvocation[] = [];
@@ -54,6 +55,15 @@ describe("runner CLI", () => {
       cwd: repoPath,
       args: ["run", "flows/implement.json", "--repo", repoPath],
     });
+    const state = await readFileRunnerControlPlaneState(statePath);
+    expect(state.runnerEvents.map((event) => event.kind)).toEqual([
+      "runner.heartbeat",
+      "task.accepted",
+      "run.preparing",
+      "run.started",
+      "run.completed",
+      "runner.heartbeat",
+    ]);
   });
 
   it("returns usage errors without running a cycle", async () => {
@@ -68,7 +78,11 @@ describe("runner CLI", () => {
   });
 });
 
-async function fixture(): Promise<{ configPath: string; repoPath: string }> {
+async function fixture(): Promise<{
+  configPath: string;
+  repoPath: string;
+  statePath: string;
+}> {
   const dir = await mkdtemp(join(tmpdir(), "nitely-runner-cli-"));
   const repoPath = join(dir, "repo");
   const statePath = join(dir, "state", "control-plane.json");
@@ -89,7 +103,7 @@ async function fixture(): Promise<{ configPath: string; repoPath: string }> {
     ),
     "utf8",
   );
-  return { configPath, repoPath };
+  return { configPath, repoPath, statePath };
 }
 
 function fileState(): FileRunnerControlPlaneState {

@@ -95,5 +95,9 @@ runner cycle handled task=task-1 status=succeeded events=4 rejected=0
 runner cycle run=<run-id>
 ```
 
+`run-once` sends metadata-only heartbeat events before and after the assignment
+cycle, then reports accepted/preparing/started/terminal run events for the
+assignment itself.
+
 If the control plane rejects an event, the CLI exits non-zero and prints each
 rejected event id, kind, and safe reason.

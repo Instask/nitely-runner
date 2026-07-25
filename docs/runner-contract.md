@@ -126,7 +126,8 @@ change request URL, flow id/path, and source revision.
 file-backed control-plane state and HTTP control-plane endpoints. Relative
 file-backed state paths and repository paths resolve from the config file
 directory; flow paths stay repo-relative so `nitely run` resolves them inside
-the target checkout.
+the target checkout. `runConfiguredRunnerOnce` and the `run-once` CLI send a
+heartbeat before and after the assignment cycle.
 
 Raw command logs and artifact bytes should be uploaded only when policy allows
 it. Metadata-first streaming is the default.

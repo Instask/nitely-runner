@@ -5,9 +5,11 @@ import {
   runOneAssignmentCycle,
   type RunnerCycleResult,
   type RunnerIdentity,
+  type RunnerEventReportResult,
   type RunnerOutboundEventKind,
 } from "./assignment-runner.js";
 import { FileRunnerControlPlaneClient } from "./file-control-plane.js";
+import { reportRunnerHeartbeat } from "./heartbeat.js";
 import {
   HttpRunnerControlPlaneClient,
   type RunnerFetch,
@@ -47,6 +49,11 @@ export interface RunConfiguredAssignmentCycleInput {
   createId?: (kind: RunnerOutboundEventKind) => string;
   runCommand?: NitelyCommandRunner;
   fetch?: RunnerFetch;
+}
+
+export interface RunConfiguredRunnerOnceResult {
+  cycle: RunnerCycleResult;
+  heartbeatReports: RunnerEventReportResult[];
 }
 
 export interface ConfiguredRunnerComponents {
@@ -167,6 +174,39 @@ export async function runConfiguredAssignmentCycle(
     now: input.now,
     createId: input.createId,
   });
+}
+
+export async function runConfiguredRunnerOnce(
+  input: RunConfiguredAssignmentCycleInput,
+): Promise<RunConfiguredRunnerOnceResult> {
+  const components = createConfiguredRunnerComponents(input);
+  const heartbeatReports: RunnerEventReportResult[] = [];
+  heartbeatReports.push(
+    await reportRunnerHeartbeat({
+      identity: components.identity,
+      client: components.client,
+      status: "idle",
+      activeRunIds: [],
+      now: input.now,
+    }),
+  );
+  const cycle = await runOneAssignmentCycle({
+    identity: components.identity,
+    client: components.client,
+    executor: components.executor,
+    now: input.now,
+    createId: input.createId,
+  });
+  heartbeatReports.push(
+    await reportRunnerHeartbeat({
+      identity: components.identity,
+      client: components.client,
+      status: "idle",
+      activeRunIds: [],
+      now: input.now,
+    }),
+  );
+  return { cycle, heartbeatReports };
 }
 
 function parsePathMap(

@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   loadRunnerConfig,
-  runConfiguredAssignmentCycle,
+  runConfiguredRunnerOnce,
 } from "./runner-config.js";
 import type { NitelyCommandRunner } from "./local-nitely-executor.js";
 
@@ -48,31 +48,48 @@ export async function runRunnerCli(
 
   try {
     const config = await loadRunnerConfig(parsed.configPath);
-    const result = await runConfiguredAssignmentCycle({
+    const result = await runConfiguredRunnerOnce({
       config,
       runCommand: options.runCommand,
       now: options.now,
       createId: options.createId,
     });
-
-    if (result.status === "idle") {
-      stdout.write("runner cycle idle\n");
-      return 0;
-    }
-
-    const rejected = result.report.rejectedEvents.length;
-    stdout.write(
-      `runner cycle handled task=${result.assignment.taskId} status=${result.projection.status} events=${result.reportedEvents.length} rejected=${rejected}\n`,
+    const heartbeatRejected = result.heartbeatReports.flatMap(
+      (report) => report.rejectedEvents,
     );
-    if (result.projection.runId) {
-      stdout.write(`runner cycle run=${result.projection.runId}\n`);
+
+    if (result.cycle.status === "idle") {
+      stdout.write("runner cycle idle\n");
+      for (const event of heartbeatRejected) {
+        stderr.write(
+          `rejected heartbeat ${event.eventId} kind=${event.kind}: ${event.reason}\n`,
+        );
+      }
+      return heartbeatRejected.length > 0 ? 1 : 0;
     }
-    for (const event of result.report.rejectedEvents) {
+
+    const rejected = result.cycle.report.rejectedEvents.length;
+    stdout.write(
+      `runner cycle handled task=${result.cycle.assignment.taskId} status=${result.cycle.projection.status} events=${result.cycle.reportedEvents.length} rejected=${rejected}\n`,
+    );
+    if (result.cycle.projection.runId) {
+      stdout.write(`runner cycle run=${result.cycle.projection.runId}\n`);
+    }
+    for (const event of heartbeatRejected) {
+      stderr.write(
+        `rejected heartbeat ${event.eventId} kind=${event.kind}: ${event.reason}\n`,
+      );
+    }
+    for (const event of result.cycle.report.rejectedEvents) {
       stderr.write(
         `rejected event ${event.eventId} kind=${event.kind}: ${event.reason}\n`,
       );
     }
-    return rejected > 0 || result.projection.status === "failed" ? 1 : 0;
+    return heartbeatRejected.length > 0 ||
+      rejected > 0 ||
+      result.cycle.projection.status === "failed"
+      ? 1
+      : 0;
   } catch (error) {
     stderr.write(`runner cycle failed: ${safeErrorMessage(error)}\n`);
     return 1;
