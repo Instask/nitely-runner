@@ -5,8 +5,11 @@ skeleton to `nitely-runner` through the public runner poll/report contract.
 
 It keeps execution local:
 
-- the control plane stores runner and assignment state in memory;
+- the control plane can store runner, assignment, event, projection, and audit
+  metadata in a local JSON state file;
 - the runner maps `repoId` to a local checkout path from local config;
+- the runner can persist its own assignment projection in a local JSON state
+  file;
 - assignments carry repository metadata, source revision, flow id, and flow
   path, but never a runner-local checkout path.
 
@@ -25,8 +28,13 @@ The package binary is equivalent:
 ```bash
 nitely-control-plane serve --host 127.0.0.1 --port 8787 \
   --runner-token runner-dev-token \
-  --admin-token admin-dev-token
+  --admin-token admin-dev-token \
+  --state-path .nitely/control-plane.local.json
 ```
+
+Omit `--state-path` for a purely in-memory rehearsal. Keep it for restart
+durability checks and for debugging the metadata projection after the process
+exits.
 
 ## 2. Prepare Runner Config
 
@@ -45,11 +53,16 @@ The runner config owns the checkout mapping:
     "baseUrl": "http://127.0.0.1:8787",
     "runnerToken": "runner-dev-token"
   },
+  "runnerStatePath": ".nitely/runner-state.local.json",
   "repositoryPaths": {
     "repo-1": "/absolute/path/to/customer/repo"
   }
 }
 ```
+
+`runnerStatePath` is runner-local state. It records assignment lifecycle
+progress for restart recovery and troubleshooting; it is not sent to the
+control plane.
 
 ## 3. Register A Runner
 
@@ -139,3 +152,25 @@ curl -sS "http://127.0.0.1:8787/runs/<run-id>?tenantId=tenant-1" \
 The response should include the run id, task id, repository id, flow path, and a
 terminal control-plane status such as `completed`. If the Nitely CLI printed a
 change request URL, the projection should include `changeRequestUrl` as well.
+
+## 7. Verify Restart Durability
+
+Stop the control-plane process, restart it with the same `--state-path`, and
+query the same run projection again:
+
+```bash
+nitely-control-plane serve --host 127.0.0.1 --port 8787 \
+  --runner-token runner-dev-token \
+  --admin-token admin-dev-token \
+  --state-path .nitely/control-plane.local.json
+
+curl -sS "http://127.0.0.1:8787/runs/<run-id>?tenantId=tenant-1" \
+  -H 'authorization: Bearer admin-dev-token'
+```
+
+The restarted response should still show the terminal run status. The
+control-plane state file should retain runner registrations, assignments,
+runner events, run projections, and metadata-only audit events. The runner
+state file should retain the assignment projection and applied lifecycle event
+ids. Bearer token values must remain only in local config or process
+environment, not in either persisted state file.
