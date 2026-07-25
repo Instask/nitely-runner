@@ -4,6 +4,8 @@ import type {
   RunnerEventReportResult,
   RunnerIdentity,
   RunnerOutboundEvent,
+  RunnerRegistrationClient,
+  RunnerRegistrationResult,
 } from "./assignment-runner.js";
 
 export type RunnerFetch = (
@@ -24,7 +26,9 @@ export class HttpRunnerControlPlaneClientError extends Error {
   }
 }
 
-export class HttpRunnerControlPlaneClient implements RunnerControlPlaneClient {
+export class HttpRunnerControlPlaneClient
+  implements RunnerControlPlaneClient, RunnerRegistrationClient
+{
   readonly #baseUrl: URL;
   readonly #headers: Record<string, string>;
   readonly #fetch: RunnerFetch;
@@ -35,6 +39,33 @@ export class HttpRunnerControlPlaneClient implements RunnerControlPlaneClient {
     );
     this.#headers = options.headers ?? {};
     this.#fetch = options.fetch ?? fetch;
+  }
+
+  async registerRunner(
+    identity: RunnerIdentity,
+  ): Promise<RunnerRegistrationResult> {
+    const url = new URL("runner/register", this.#baseUrl);
+    const body = await this.#requestJson(url, {
+      method: "POST",
+      headers: {
+        ...this.#headers,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(identity),
+    });
+    if (!isRecord(body) || !isRecord(body.runner)) {
+      throw new HttpRunnerControlPlaneClientError(
+        "runner registration response must be { runner }",
+      );
+    }
+    return {
+      runner: body.runner as unknown as RunnerRegistrationResult["runner"],
+      ...(isRecord(body.event)
+        ? {
+            event: body.event as unknown as RunnerRegistrationResult["event"],
+          }
+        : {}),
+    };
   }
 
   async pollAssignments(

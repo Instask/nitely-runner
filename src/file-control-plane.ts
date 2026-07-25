@@ -9,6 +9,9 @@ import {
   type RunnerIdentity,
   type RunnerOutboundEvent,
   type RunnerRedactionStatus,
+  type RunnerRegistration,
+  type RunnerRegistrationClient,
+  type RunnerRegistrationResult,
 } from "./assignment-runner.js";
 
 export type FileRunnerAssignmentStatus =
@@ -100,11 +103,40 @@ export class FileRunnerControlPlaneError extends Error {
   }
 }
 
-export class FileRunnerControlPlaneClient implements RunnerControlPlaneClient {
+export class FileRunnerControlPlaneClient
+  implements RunnerControlPlaneClient, RunnerRegistrationClient
+{
   readonly #path: string;
 
   constructor(options: FileRunnerControlPlaneClientOptions) {
     this.#path = options.path;
+  }
+
+  async registerRunner(
+    identity: RunnerIdentity,
+  ): Promise<RunnerRegistrationResult> {
+    const state = await readFileRunnerControlPlaneState(this.#path);
+    const now = new Date().toISOString();
+    const key = runnerKey(identity.tenantId, identity.runnerId);
+    const existing = state.runners[key];
+    const runner: FileRunnerRegistration = {
+      tenantId: identity.tenantId,
+      runnerId: identity.runnerId,
+      policy: {
+        tenantId: identity.tenantId,
+        runnerId: identity.runnerId,
+        policyVersion: identity.policyVersion,
+        allowedRepositories: [...identity.allowedRepositories],
+      },
+      status: "registered",
+      version: identity.version,
+      activeRunIds: existing?.activeRunIds ?? [],
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    state.runners[key] = runner;
+    await writeFileRunnerControlPlaneState(this.#path, state);
+    return { runner: runner as RunnerRegistration };
   }
 
   async pollAssignments(

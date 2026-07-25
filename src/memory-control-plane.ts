@@ -4,11 +4,17 @@ import type {
   RunnerEventReportResult,
   RunnerIdentity,
   RunnerOutboundEvent,
+  RunnerRegistration,
+  RunnerRegistrationClient,
+  RunnerRegistrationResult,
 } from "./assignment-runner.js";
 
-export class MemoryRunnerControlPlaneClient implements RunnerControlPlaneClient {
+export class MemoryRunnerControlPlaneClient
+  implements RunnerControlPlaneClient, RunnerRegistrationClient
+{
   readonly #assignments: RunnerAssignmentEvent[] = [];
   readonly #events: RunnerOutboundEvent[] = [];
+  readonly #runners = new Map<string, RunnerRegistration>();
 
   constructor(assignments: RunnerAssignmentEvent[] = []) {
     this.#assignments.push(...assignments);
@@ -16,6 +22,31 @@ export class MemoryRunnerControlPlaneClient implements RunnerControlPlaneClient 
 
   enqueueAssignment(assignment: RunnerAssignmentEvent): void {
     this.#assignments.push(assignment);
+  }
+
+  async registerRunner(
+    identity: RunnerIdentity,
+  ): Promise<RunnerRegistrationResult> {
+    const now = new Date().toISOString();
+    const key = runnerKey(identity.tenantId, identity.runnerId);
+    const existing = this.#runners.get(key);
+    const runner: RunnerRegistration = {
+      tenantId: identity.tenantId,
+      runnerId: identity.runnerId,
+      policy: {
+        tenantId: identity.tenantId,
+        runnerId: identity.runnerId,
+        policyVersion: identity.policyVersion,
+        allowedRepositories: [...identity.allowedRepositories],
+      },
+      status: "registered",
+      version: identity.version,
+      activeRunIds: existing?.activeRunIds ?? [],
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.#runners.set(key, runner);
+    return { runner };
   }
 
   async pollAssignments(
@@ -73,6 +104,10 @@ export class MemoryRunnerControlPlaneClient implements RunnerControlPlaneClient 
     return [...this.#events];
   }
 
+  listRunners(): RunnerRegistration[] {
+    return [...this.#runners.values()];
+  }
+
   #removeAssignment(
     tenantId: string,
     runnerId: string,
@@ -91,4 +126,8 @@ export class MemoryRunnerControlPlaneClient implements RunnerControlPlaneClient 
       this.#assignments.splice(index, 1);
     }
   }
+}
+
+function runnerKey(tenantId: string, runnerId: string): string {
+  return `${tenantId}:${runnerId}`;
 }

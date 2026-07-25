@@ -23,6 +23,35 @@ export interface RunnerIdentity {
   version: string;
 }
 
+export interface RunnerPolicySnapshot {
+  tenantId: string;
+  runnerId: string;
+  policyVersion: string;
+  allowedRepositories: string[];
+  allowedUploadRedactionStatuses?: RunnerRedactionStatus[];
+}
+
+export interface RunnerRegistration {
+  tenantId: string;
+  runnerId: string;
+  policy: RunnerPolicySnapshot;
+  status: string;
+  version?: string;
+  activeRunIds: string[];
+  lastSeenAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RunnerRegistrationResult {
+  runner: RunnerRegistration;
+  event?: RunnerProtocolEvent<"runner.register.accepted">;
+}
+
+export interface RunnerRegistrationClient {
+  registerRunner(identity: RunnerIdentity): Promise<RunnerRegistrationResult>;
+}
+
 export interface RunnerAssignmentPayload {
   [key: string]: unknown;
   taskId: string;

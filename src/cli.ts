@@ -2,8 +2,10 @@ import { fileURLToPath } from "node:url";
 
 import {
   loadRunnerConfig,
+  registerConfiguredRunner,
   runConfiguredRunnerOnce,
 } from "./runner-config.js";
+import type { RunnerFetch } from "./http-control-plane.js";
 import type { NitelyCommandRunner } from "./local-nitely-executor.js";
 
 export interface RunnerCliTextStream {
@@ -14,6 +16,7 @@ export interface RunRunnerCliOptions {
   stdout?: RunnerCliTextStream;
   stderr?: RunnerCliTextStream;
   runCommand?: NitelyCommandRunner;
+  fetch?: RunnerFetch;
   now?: () => Date;
   createId?: (kind: string) => string;
 }
@@ -31,12 +34,12 @@ export async function runRunnerCli(
   }
 
   const command = argv[0];
-  if (command !== "run-once") {
+  if (command !== "run-once" && command !== "register") {
     stderr.write(`unknown command: ${command}\n\n${usage()}`);
     return 2;
   }
 
-  const parsed = parseRunOnceArgs(argv.slice(1));
+  const parsed = parseConfigCommandArgs(command, argv.slice(1));
   if (parsed.status === "help") {
     stdout.write(usage());
     return 0;
@@ -48,9 +51,21 @@ export async function runRunnerCli(
 
   try {
     const config = await loadRunnerConfig(parsed.configPath);
+    if (command === "register") {
+      const result = await registerConfiguredRunner({
+        config,
+        fetch: options.fetch,
+      });
+      stdout.write(
+        `runner registered tenant=${result.runner.tenantId} runner=${result.runner.runnerId} policy=${result.runner.policy.policyVersion}\n`,
+      );
+      return 0;
+    }
+
     const result = await runConfiguredRunnerOnce({
       config,
       runCommand: options.runCommand,
+      fetch: options.fetch,
       now: options.now,
       createId: options.createId,
     });
@@ -91,12 +106,13 @@ export async function runRunnerCli(
       ? 1
       : 0;
   } catch (error) {
-    stderr.write(`runner cycle failed: ${safeErrorMessage(error)}\n`);
+    stderr.write(`runner ${command} failed: ${safeErrorMessage(error)}\n`);
     return 1;
   }
 }
 
-function parseRunOnceArgs(
+function parseConfigCommandArgs(
+  command: string,
   argv: string[],
 ):
   | { status: "ok"; configPath: string }
@@ -116,7 +132,7 @@ function parseRunOnceArgs(
       }
       continue;
     }
-    return { status: "error", message: `unknown run-once option: ${arg}` };
+    return { status: "error", message: `unknown ${command} option: ${arg}` };
   }
   if (!configPath) {
     return { status: "error", message: "missing required --config <path>" };
@@ -127,9 +143,11 @@ function parseRunOnceArgs(
 function usage(): string {
   return [
     "Usage:",
+    "  nitely-runner register --config <path>",
     "  nitely-runner run-once --config <path>",
     "",
     "Commands:",
+    "  register    Register this runner identity with the configured control plane.",
     "  run-once    Poll one assignment, execute it, and report events.",
     "",
   ].join("\n");

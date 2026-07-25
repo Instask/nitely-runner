@@ -18,6 +18,50 @@ const identity: RunnerIdentity = {
 };
 
 describe("HttpRunnerControlPlaneClient", () => {
+  it("registers the runner identity with the control plane", async () => {
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const client = new HttpRunnerControlPlaneClient({
+      baseUrl: "https://control.example/api/",
+      headers: { authorization: "Bearer token" },
+      fetch: fakeFetch(calls, {
+        runner: {
+          tenantId: "tenant-1",
+          runnerId: "runner-1",
+          policy: {
+            tenantId: "tenant-1",
+            runnerId: "runner-1",
+            policyVersion: "policy-1",
+            allowedRepositories: ["repo-1"],
+          },
+          status: "registered",
+          version: "0.1.0",
+          activeRunIds: [],
+          createdAt: "2026-07-25T01:00:00.000Z",
+          updatedAt: "2026-07-25T01:00:00.000Z",
+        },
+        event: { kind: "runner.register.accepted" },
+      }),
+    });
+
+    await expect(client.registerRunner(identity)).resolves.toMatchObject({
+      runner: {
+        tenantId: "tenant-1",
+        runnerId: "runner-1",
+        status: "registered",
+      },
+      event: { kind: "runner.register.accepted" },
+    });
+    expect(calls[0]?.url).toBe("https://control.example/api/runner/register");
+    expect(calls[0]?.init).toMatchObject({
+      method: "POST",
+      headers: {
+        authorization: "Bearer token",
+        "content-type": "application/json",
+      },
+    });
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(identity);
+  });
+
   it("polls assignments with runner identity query parameters", async () => {
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
     const client = new HttpRunnerControlPlaneClient({

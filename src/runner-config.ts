@@ -7,6 +7,7 @@ import {
   type RunnerIdentity,
   type RunnerEventReportResult,
   type RunnerOutboundEventKind,
+  type RunnerRegistrationResult,
 } from "./assignment-runner.js";
 import { FileRunnerControlPlaneClient } from "./file-control-plane.js";
 import { reportRunnerHeartbeat } from "./heartbeat.js";
@@ -54,6 +55,11 @@ export interface RunConfiguredAssignmentCycleInput {
 export interface RunConfiguredRunnerOnceResult {
   cycle: RunnerCycleResult;
   heartbeatReports: RunnerEventReportResult[];
+}
+
+export interface RegisterConfiguredRunnerInput {
+  config: RunnerConfig;
+  fetch?: RunnerFetch;
 }
 
 export interface ConfiguredRunnerComponents {
@@ -174,6 +180,13 @@ export async function runConfiguredAssignmentCycle(
     now: input.now,
     createId: input.createId,
   });
+}
+
+export async function registerConfiguredRunner(
+  input: RegisterConfiguredRunnerInput,
+): Promise<RunnerRegistrationResult> {
+  const components = createConfiguredRunnerComponents(input);
+  return await components.client.registerRunner(components.identity);
 }
 
 export async function runConfiguredRunnerOnce(

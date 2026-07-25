@@ -25,6 +25,38 @@ const identity: RunnerIdentity = {
 };
 
 describe("FileRunnerControlPlaneClient", () => {
+  it("registers runner identity in file state", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nitely-file-control-plane-register-"));
+    const path = join(dir, "control-plane.json");
+    const client = new FileRunnerControlPlaneClient({ path });
+
+    await expect(client.registerRunner(identity)).resolves.toMatchObject({
+      runner: {
+        tenantId: "tenant-1",
+        runnerId: "runner-1",
+        policy: {
+          tenantId: "tenant-1",
+          runnerId: "runner-1",
+          policyVersion: "policy-1",
+          allowedRepositories: ["repo-1"],
+        },
+        status: "registered",
+        version: "0.1.0",
+        activeRunIds: [],
+      },
+    });
+    await expect(readFileRunnerControlPlaneState(path)).resolves.toMatchObject({
+      runners: {
+        "tenant-1:runner-1": {
+          status: "registered",
+          version: "0.1.0",
+        },
+      },
+      assignments: {},
+      runnerEvents: [],
+    });
+  });
+
   it("polls assigned tasks and records runner events", async () => {
     const { path } = await fixture();
     const client = new FileRunnerControlPlaneClient({ path });

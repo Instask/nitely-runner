@@ -24,21 +24,37 @@ The package binary is equivalent:
 nitely-control-plane serve --host 127.0.0.1 --port 8787
 ```
 
-## 2. Register A Runner
+## 2. Prepare Runner Config
 
-```bash
-curl -sS -X POST http://127.0.0.1:8787/runner/register \
-  -H 'content-type: application/json' \
-  --data '{
-    "tenantId": "tenant-1",
-    "runnerId": "runner-1",
-    "policyVersion": "policy-1",
-    "allowedRepositories": ["repo-1"],
-    "version": "0.1.0"
-  }'
+Copy `examples/http-runner.config.example.json` to a local ignored file such as
+`runner.http.local.json`, then replace `/absolute/path/to/customer/repo` with
+the local checkout that contains the flow and input files.
+
+The runner config owns the checkout mapping:
+
+```json
+{
+  "repositoryPaths": {
+    "repo-1": "/absolute/path/to/customer/repo"
+  }
+}
 ```
 
-## 3. Seed One Assignment
+## 3. Register A Runner
+
+From `nitely-runner`:
+
+```bash
+nitely-runner register --config runner.http.local.json
+```
+
+Expected output:
+
+```text
+runner registered tenant=tenant-1 runner=runner-1 policy=policy-1
+```
+
+## 4. Seed One Assignment
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8787/assignments \
@@ -62,22 +78,6 @@ curl -sS -X POST http://127.0.0.1:8787/assignments \
     },
     "policyVersion": "policy-1"
   }'
-```
-
-## 4. Prepare Runner Config
-
-Copy `examples/http-runner.config.example.json` to a local ignored file such as
-`runner.http.local.json`, then replace `/absolute/path/to/customer/repo` with
-the local checkout that contains the flow and input files.
-
-The runner config owns the checkout mapping:
-
-```json
-{
-  "repositoryPaths": {
-    "repo-1": "/absolute/path/to/customer/repo"
-  }
-}
 ```
 
 ## 5. Run One Assignment Cycle

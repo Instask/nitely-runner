@@ -28,6 +28,31 @@ const identity: RunnerIdentity = {
 };
 
 describe("runner CLI", () => {
+  it("registers a configured runner identity", async () => {
+    const { configPath, statePath } = await registrationFixture();
+    const stdout = textWriter();
+    const stderr = textWriter();
+
+    const code = await runRunnerCli(["register", "--config", configPath], {
+      stdout,
+      stderr,
+    });
+
+    expect(code).toBe(0);
+    expect(stdout.text).toContain(
+      "runner registered tenant=tenant-1 runner=runner-1 policy=policy-1",
+    );
+    expect(stderr.text).toBe("");
+    await expect(readFileRunnerControlPlaneState(statePath)).resolves.toMatchObject({
+      runners: {
+        "tenant-1:runner-1": {
+          status: "registered",
+          version: "0.1.0",
+        },
+      },
+    });
+  });
+
   it("runs one configured assignment cycle", async () => {
     const { configPath, repoPath, statePath } = await fixture();
     const stdout = textWriter();
@@ -77,6 +102,29 @@ describe("runner CLI", () => {
     expect(stderr.text).toContain("missing required --config <path>");
   });
 });
+
+async function registrationFixture(): Promise<{
+  configPath: string;
+  statePath: string;
+}> {
+  const dir = await mkdtemp(join(tmpdir(), "nitely-runner-cli-register-"));
+  const statePath = join(dir, "state", "control-plane.json");
+  const configPath = join(dir, "runner.json");
+  await writeFile(
+    configPath,
+    JSON.stringify(
+      {
+        identity,
+        controlPlane: { type: "file", path: "state/control-plane.json" },
+        repositoryPaths: { "repo-1": "repo" },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  return { configPath, statePath };
+}
 
 async function fixture(): Promise<{
   configPath: string;

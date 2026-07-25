@@ -12,7 +12,8 @@
   repository mapping, flow path, source revision, and local-file input metadata.
 - Add a file-backed control-plane client and config loader for deterministic
   local runner loops.
-- Add an HTTP control-plane client for the first runner-facing API skeleton.
+- Add an HTTP control-plane client for registration, assignment polling, and
+  event reporting against the first runner-facing API skeleton.
 - Consume the public `nitely/runner-control-plane/*` contract once the OSS
   package is published or available as a workspace dependency.
 - Decide whether the first transport is polling, websocket, or queue-backed.
@@ -20,9 +21,11 @@
 
 ## M1: Local Development Runner
 
-- Start a runner process from the command line. (`run-once --config` exists.)
-- Load a local config file. (Library support exists; CLI wrapper remains.)
-- Register against a mock control plane.
+- Start a runner process from the command line. (`register --config` and
+  `run-once --config` exist.)
+- Load a local config file. (Library and CLI support exist.)
+- Register against a mock or HTTP control plane. (File-backed and HTTP clients
+  support `registerRunner`.)
 - Accept one assignment. (File-backed library loop exists.)
 - Report accepted, preparing, started, blocked, completed, failed, cancelled,
   and rejected events through the protocol client.

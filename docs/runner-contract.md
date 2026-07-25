@@ -75,8 +75,10 @@ The public protocol starts in `nitely-oss` as
 `nitely/runner-control-plane/file-stub`. This repository owns the runner daemon
 and local lifecycle behavior that consumes that contract.
 
-The first executable runner layer uses an abstract client with two operations:
+The first executable runner layer uses a small registration client and an
+abstract poll/report client:
 
+- `registerRunner(identity)`: register the runner identity and scoped policy.
 - `pollAssignments(identity)`: return ordered `task.assigned` protocol events.
 - `reportEvents(events)`: append runner-to-control-plane events and return
   accepted, duplicate, and rejected event ids.
@@ -103,6 +105,7 @@ secret-like payload fields.
 `HttpRunnerControlPlaneClient` uses the same runner client interface against
 the first control-plane HTTP skeleton:
 
+- `POST /runner/register`
 - `GET /runner/assignments?tenantId=...&runnerId=...`
 - `POST /runner/events`
 
@@ -127,7 +130,8 @@ file-backed control-plane state and HTTP control-plane endpoints. Relative
 file-backed state paths and repository paths resolve from the config file
 directory; flow paths stay repo-relative so `nitely run` resolves them inside
 the target checkout. `runConfiguredRunnerOnce` and the `run-once` CLI send a
-heartbeat before and after the assignment cycle.
+heartbeat before and after the assignment cycle. `registerConfiguredRunner` and
+the `register` CLI register the same identity before polling for work.
 
 Raw command logs and artifact bytes should be uploaded only when policy allows
 it. Metadata-first streaming is the default.
