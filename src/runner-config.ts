@@ -63,15 +63,27 @@ export interface RunConfiguredRunnerLoopInput
   extends RunConfiguredAssignmentCycleInput {
   maxCycles?: number;
   pollIntervalMs?: number;
+  continueOnError?: boolean;
   sleep?: (durationMs: number) => Promise<void>;
   onCycle?: (
     result: RunConfiguredRunnerOnceResult,
     cycleIndex: number,
   ) => Promise<void> | void;
+  onCycleError?: (
+    error: unknown,
+    cycleIndex: number,
+  ) => Promise<void> | void;
+}
+
+export interface RunConfiguredRunnerLoopFailure {
+  cycleIndex: number;
+  safeMessage: string;
 }
 
 export interface RunConfiguredRunnerLoopResult {
   cycles: RunConfiguredRunnerOnceResult[];
+  failures: RunConfiguredRunnerLoopFailure[];
+  attemptedCycles: number;
 }
 
 export interface RegisterConfiguredRunnerInput {
@@ -252,19 +264,34 @@ export async function runConfiguredRunnerLoop(
   input: RunConfiguredRunnerLoopInput,
 ): Promise<RunConfiguredRunnerLoopResult> {
   const cycles: RunConfiguredRunnerOnceResult[] = [];
+  const failures: RunConfiguredRunnerLoopFailure[] = [];
+  let attemptedCycles = 0;
   const maxCycles = input.maxCycles ?? Number.POSITIVE_INFINITY;
   const pollIntervalMs = input.pollIntervalMs ?? 5_000;
   const sleep = input.sleep ?? sleepDuration;
   for (let cycleIndex = 1; cycleIndex <= maxCycles; cycleIndex += 1) {
-    const result = await runConfiguredRunnerOnce(input);
-    cycles.push(result);
-    await input.onCycle?.(result, cycleIndex);
+    attemptedCycles = cycleIndex;
+    try {
+      const result = await runConfiguredRunnerOnce(input);
+      cycles.push(result);
+      await input.onCycle?.(result, cycleIndex);
+    } catch (error) {
+      if (!input.continueOnError) {
+        throw error;
+      }
+      const failure = {
+        cycleIndex,
+        safeMessage: safeLoopErrorMessage(error),
+      };
+      failures.push(failure);
+      await input.onCycleError?.(error, cycleIndex);
+    }
     if (cycleIndex >= maxCycles) {
       break;
     }
     await sleep(pollIntervalMs);
   }
-  return { cycles };
+  return { cycles, failures, attemptedCycles };
 }
 
 function parsePathMap(
@@ -347,6 +374,13 @@ function hasAuthorizationHeader(headers: Record<string, string>): boolean {
 
 async function sleepDuration(durationMs: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+function safeLoopErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.split("\n")[0]!.slice(0, 500);
+  }
+  return "runner loop cycle failed";
 }
 
 function requiredStringArray(

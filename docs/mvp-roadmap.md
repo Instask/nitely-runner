@@ -54,7 +54,8 @@
 
 - Signed assignment envelope.
 - Runner upgrade strategy.
-- Backpressure and retry policy.
+- Backpressure and retry policy. (`run-loop` now continues after transient
+  per-cycle failures while surfacing a non-zero bounded-run exit.)
 - Explicit artifact upload policy.
 - Audit-ready local logs.
 - Optional service installation scripts.

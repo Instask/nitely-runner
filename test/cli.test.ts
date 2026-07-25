@@ -15,6 +15,7 @@ import {
   writeFileRunnerControlPlaneState,
   type FileRunnerControlPlaneState,
 } from "../src/file-control-plane.js";
+import type { RunnerFetch } from "../src/http-control-plane.js";
 import type { NitelyCommandInvocation } from "../src/local-nitely-executor.js";
 
 const fixedNow = () => new Date("2026-07-25T01:02:03.000Z");
@@ -130,6 +131,76 @@ describe("runner CLI", () => {
     expect(stdout.text).toContain("runner loop stopped cycles=2");
     expect(stderr.text).toBe("");
     expect(calls).toHaveLength(1);
+  });
+
+  it("keeps run-loop alive after a transient cycle failure", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nitely-runner-cli-loop-http-"));
+    const repoPath = join(dir, "repo");
+    const configPath = join(dir, "runner.json");
+    await mkdir(repoPath, { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          identity,
+          controlPlane: {
+            type: "http",
+            baseUrl: "https://control.example/api",
+          },
+          repositoryPaths: { "repo-1": repoPath },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    const stdout = textWriter();
+    const stderr = textWriter();
+    let fetchCount = 0;
+    const fetch: RunnerFetch = async () => {
+      fetchCount += 1;
+      if (fetchCount === 1) {
+        throw new Error("temporary control-plane outage");
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          assignments: [],
+          acceptedEventIds: [],
+          duplicateEventIds: [],
+          rejectedEvents: [],
+        }),
+      };
+    };
+
+    const code = await runRunnerCli(
+      [
+        "run-loop",
+        "--config",
+        configPath,
+        "--max-cycles",
+        "2",
+        "--poll-interval-ms",
+        "1",
+      ],
+      {
+        stdout,
+        stderr,
+        fetch,
+        sleep: async () => {},
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(stdout.text).toContain("runner loop cycle=1");
+    expect(stdout.text).toContain("runner loop cycle=2");
+    expect(stdout.text).toContain("runner cycle idle");
+    expect(stdout.text).toContain("runner loop stopped cycles=2");
+    expect(stderr.text).toContain(
+      "runner loop cycle=1 failed: temporary control-plane outage",
+    );
   });
 
   it("returns usage errors without running a cycle", async () => {

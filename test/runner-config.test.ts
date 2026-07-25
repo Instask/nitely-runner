@@ -245,6 +245,58 @@ describe("runner config", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("can continue a bounded runner loop after transient cycle errors", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nitely-runner-loop-retry-"));
+    const repoPath = join(dir, "repo");
+    await mkdir(repoPath, { recursive: true });
+    const config = parseRunnerConfig(
+      {
+        identity,
+        controlPlane: {
+          type: "http",
+          baseUrl: "https://control.example/api",
+        },
+        repositoryPaths: { "repo-1": repoPath },
+        flowPaths: { "flow-1": "flows/implement.json" },
+      },
+      dir,
+    );
+    let fetchCount = 0;
+    const cycleErrors: string[] = [];
+
+    const result = await runConfiguredRunnerLoop({
+      config,
+      maxCycles: 2,
+      pollIntervalMs: 1,
+      continueOnError: true,
+      sleep: async () => {},
+      now: fixedNow,
+      createId: (kind) => `retry-${kind}`,
+      fetch: async (url, init) => {
+        fetchCount += 1;
+        if (fetchCount === 1) {
+          throw new Error("control plane unavailable");
+        }
+        return fakeFetch([])(url, init);
+      },
+      onCycleError: (error) => {
+        cycleErrors.push(error instanceof Error ? error.message : String(error));
+      },
+      runCommand: async () => ({
+        exitCode: 0,
+        stdout: "RUN run-loop-retry completed\n",
+        stderr: "",
+      }),
+    });
+
+    expect(result.attemptedCycles).toBe(2);
+    expect(result.failures).toEqual([
+      { cycleIndex: 1, safeMessage: "control plane unavailable" },
+    ]);
+    expect(result.cycles.map((cycle) => cycle.cycle.status)).toEqual(["handled"]);
+    expect(cycleErrors).toEqual(["control plane unavailable"]);
+  });
+
   it("rejects unsupported control-plane types", () => {
     expect(() =>
       parseRunnerConfig({

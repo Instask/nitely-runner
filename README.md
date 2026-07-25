@@ -38,15 +38,17 @@ and local-file inputs. `loadRunnerConfig`, `registerConfiguredRunner`,
 `runConfiguredAssignmentCycle`, `nitely-runner register --config <path>`, and
 `nitely-runner run-once --config <path>` provide deterministic one-shot
 rehearsal. `nitely-runner run-loop --config <path>` is the first long-running
-poll loop before service installation. Executors can also return artifact
-metadata as `evidenceArtifacts`; the runner reports it through metadata-only
-`evidence.reported` events. The control-plane client interface also polls
-inbound control-plane events such as cooperative `task.cancel_requested`
-instructions, and the local CLI executor can abort an active `nitely run`
-subprocess when that request matches the current run. HTTP runner config
-supports a runner-scoped bearer token for protected control-plane routes. The
-runner also rejects assignment metadata that tries to carry credentials or
-runner-local checkout paths before invoking the local executor.
+poll loop before service installation; it continues after transient per-cycle
+control-plane failures while returning a non-zero process status for the bounded
+run. Executors can also return artifact metadata as `evidenceArtifacts`; the
+runner reports it through metadata-only `evidence.reported` events. The
+control-plane client interface also polls inbound control-plane events such as
+cooperative `task.cancel_requested` instructions, and the local CLI executor can
+abort an active `nitely run` subprocess when that request matches the current
+run. HTTP runner config supports a runner-scoped bearer token for protected
+control-plane routes. The runner also rejects assignment metadata that tries to
+carry credentials or runner-local checkout paths before invoking the local
+executor.
 
 - [docs/runner-contract.md](docs/runner-contract.md)
 - [docs/mvp-roadmap.md](docs/mvp-roadmap.md)

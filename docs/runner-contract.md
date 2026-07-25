@@ -158,7 +158,10 @@ the target checkout. `runConfiguredRunnerOnce` and the `run-once` CLI send a
 heartbeat before and after the assignment cycle. `registerConfiguredRunner` and
 the `register` CLI register the same identity before polling for work.
 `runConfiguredRunnerLoop` and `run-loop` reuse the same one-cycle behavior in a
-bounded or long-running poll loop.
+bounded or long-running poll loop. Library callers can choose fail-fast or
+continue-on-error behavior; the CLI loop continues after transient per-cycle
+failures, logs the failed cycle, and returns non-zero when any bounded cycle
+failed.
 
 Raw command logs and artifact bytes should be uploaded only when policy allows
 it. Metadata-first streaming is the default.

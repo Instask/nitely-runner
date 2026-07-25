@@ -72,6 +72,7 @@ export async function runRunnerCli(
         now: options.now,
         createId: options.createId,
         sleep: options.sleep,
+        continueOnError: true,
         ...(parsed.maxCycles !== undefined
           ? { maxCycles: parsed.maxCycles }
           : {}),
@@ -82,8 +83,15 @@ export async function runRunnerCli(
           stdout.write(`runner loop cycle=${cycleIndex}\n`);
           exitCode = Math.max(exitCode, writeCycleResult(result, stdout, stderr));
         },
+        onCycleError: (error, cycleIndex) => {
+          stdout.write(`runner loop cycle=${cycleIndex}\n`);
+          stderr.write(
+            `runner loop cycle=${cycleIndex} failed: ${safeErrorMessage(error)}\n`,
+          );
+          exitCode = 1;
+        },
       });
-      stdout.write(`runner loop stopped cycles=${loop.cycles.length}\n`);
+      stdout.write(`runner loop stopped cycles=${loop.attemptedCycles}\n`);
       return exitCode;
     }
 
