@@ -4,6 +4,9 @@
 
 - Define runner identity, run assignment, lifecycle, cancellation, and event
   envelopes.
+- Implement lifecycle projection tests locally before adding transport.
+- Consume the public `nitely/runner-control-plane/*` contract once the OSS
+  package is published or available as a workspace dependency.
 - Decide whether the first transport is polling, websocket, or queue-backed.
 - Keep execution delegated to `nitely-oss`.
 

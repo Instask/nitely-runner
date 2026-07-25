@@ -30,16 +30,11 @@ A runner identity should include:
 
 A run assignment should include:
 
-- `assignmentId`
-- `runId`
-- `repository`
-- `sourceRevision`
-- `flow`
+- `taskId`
+- `repoId`
+- `flowId`
 - `inputs`
-- `taskScope`
-- `policy`
-- `timeout`
-- `redactionHints`
+- `policyVersion`
 
 Assignments must be immutable after acceptance. Changes should create a new
 assignment or an explicit cancellation/retry instruction.
@@ -62,19 +57,23 @@ execution truth.
 Minimum event families:
 
 - `runner.heartbeat`
-- `assignment.accepted`
-- `assignment.rejected`
-- `run.preparing`
-- `stage.started`
-- `stage.output`
-- `stage.blocked`
-- `stage.completed`
-- `stage.failed`
-- `artifact.recorded`
-- `evidence.recorded`
+- `task.assigned`
+- `task.accepted`
+- `task.rejected`
+- `task.cancel_requested`
+- `run.started`
+- `stage.updated`
+- `run.blocked`
 - `run.completed`
 - `run.failed`
 - `run.cancelled`
+- `evidence.reported`
+- `runner.error`
+
+The public protocol starts in `nitely-oss` as
+`nitely/runner-control-plane/protocol` and
+`nitely/runner-control-plane/file-stub`. This repository owns the runner daemon
+and local lifecycle behavior that consumes that contract.
 
 Raw command logs and artifact bytes should be uploaded only when policy allows
 it. Metadata-first streaming is the default.
