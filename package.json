@@ -4,6 +4,9 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "bin": {
+    "nitely-runner": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,6 +19,10 @@
     "./assignment-runner": {
       "types": "./dist/assignment-runner.d.ts",
       "default": "./dist/assignment-runner.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
     },
     "./file-control-plane": {
       "types": "./dist/file-control-plane.d.ts",
@@ -39,7 +46,7 @@
   },
   "packageManager": "pnpm@11.0.7",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest",
     "test:run": "vitest run"

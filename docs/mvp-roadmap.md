@@ -19,7 +19,7 @@
 
 ## M1: Local Development Runner
 
-- Start a runner process from the command line.
+- Start a runner process from the command line. (`run-once --config` exists.)
 - Load a local config file. (Library support exists; CLI wrapper remains.)
 - Register against a mock control plane.
 - Accept one assignment. (File-backed library loop exists.)

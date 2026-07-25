@@ -1,4 +1,5 @@
 export * from "./assignment-runner.js";
+export * from "./cli.js";
 export * from "./file-control-plane.js";
 export * from "./lifecycle.js";
 export * from "./local-nitely-executor.js";
