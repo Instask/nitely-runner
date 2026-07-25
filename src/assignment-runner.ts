@@ -770,13 +770,19 @@ async function watchCancellationRequests(input: {
   while (!input.isDone() && !input.signal.aborted) {
     const runId = input.currentRunId();
     if (runId) {
-      const events = await input.client.pollControlPlaneEvents(input.identity);
-      const cancellation = events.find((event) =>
-        isMatchingCancellationRequest(event, input.assignment, runId),
-      );
-      if (cancellation) {
-        input.onCancel(cancellation);
-        return;
+      try {
+        const events = await input.client.pollControlPlaneEvents(input.identity);
+        const cancellation = events.find((event) =>
+          isMatchingCancellationRequest(event, input.assignment, runId),
+        );
+        if (cancellation) {
+          input.onCancel(cancellation);
+          return;
+        }
+      } catch {
+        if (input.isDone() || input.signal.aborted) {
+          return;
+        }
       }
     }
     await sleepUntilNextPoll(input.sleep, input.pollIntervalMs, input.signal);
