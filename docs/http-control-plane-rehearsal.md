@@ -3,6 +3,13 @@
 This rehearsal connects the dependency-free `nitely-control-plane` HTTP
 skeleton to `nitely-runner` through the public runner poll/report contract.
 
+`nitely-control-plane` is a private repository. Without access to it, rehearse
+the same lifecycle with the file-backed control plane (`"controlPlane":
+{ "type": "file", "path": "..." }` in the runner config), or serve the routes in
+[runner-contract.md](runner-contract.md) from your own control plane. The
+protocol types are public in `Instask/nitely-oss` under
+`nitely/runner-control-plane/*`.
+
 It keeps execution local:
 
 - the control plane can store runner, assignment, event, projection, and audit
